@@ -260,9 +260,7 @@ adapters. They do not change the live wallpaper or user units.
 
 See
 [Architecture](https://github.com/tylermowll/countscape/blob/main/docs/architecture.md)
-for the design and the
-[Implementation Plan](https://github.com/tylermowll/countscape/blob/main/docs/implementation-plan.md)
-for the remaining release gates. Contributions are welcome; start with
+for the design. Contributions are welcome; start with
 [CONTRIBUTING.md](https://github.com/tylermowll/countscape/blob/main/CONTRIBUTING.md).
 Report security issues using
 [SECURITY.md](https://github.com/tylermowll/countscape/blob/main/SECURITY.md).

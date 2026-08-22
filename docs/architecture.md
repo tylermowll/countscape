@@ -1,8 +1,6 @@
 # Architecture
 
-This document describes the current Countscape implementation. Remaining
-publication and live-platform gates are tracked separately in the
-[implementation plan](implementation-plan.md).
+This document describes the current Countscape implementation.
 
 ## Product boundary
 

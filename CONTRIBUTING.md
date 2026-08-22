@@ -5,7 +5,7 @@ testable changes over broad platform promises.
 
 ## Before opening a change
 
-- Search existing issues and the [implementation plan](docs/implementation-plan.md).
+- Search existing issues before proposing or opening a change.
 - Keep Ubuntu GNOME/Wayland as the supported platform unless a proposal includes
   both contract fixtures and live verification for another platform.
 - Open an issue before a large behavior, schema, lifecycle, or dependency

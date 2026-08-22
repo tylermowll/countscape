@@ -73,7 +73,6 @@ source-include = [
     "SECURITY.md",
     "config/countscape.example.toml",
     "docs/architecture.md",
-    "docs/implementation-plan.md",
     "tests/conftest.py",
     "tests/fixtures/mutter-single-display.json",
     "tests/test_cli.py",
