@@ -2,46 +2,100 @@ name: CI
 
 on:
   push:
+    branches:
+      - "**"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    name: Ubuntu 26.04 / Python 3.14
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - name: Check out complete repository history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          enable-cache: true
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Install Python
-        run: uv python install 3.14
+      - name: Install pinned uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Synchronize locked environment
-        run: uv sync --locked
+        run: uv sync --locked --all-groups
 
-      - name: Check privacy boundary
-        run: uv run python tools/privacy_check.py
+      - name: Audit worktree and complete reachable history
+        run: uv run python tools/privacy_check.py --history
+
+      - name: Check local Markdown links
+        run: uv run python tools/check_markdown_links.py
+
+      - name: Check formatting
+        run: uv run ruff format --check .
 
       - name: Lint
         run: uv run ruff check .
 
-      - name: Test
-        run: uv run pytest
+      - name: Test with branch coverage gate
+        run: >-
+          uv run pytest
+          --cov=countscape
+          --cov-branch
+          --cov-report=term-missing
+          --cov-config=.coveragerc
 
-      - name: Build distributions
-        run: uv build
+      - name: Build wheel and source distribution once
+        run: uv build --no-sources --clear --out-dir dist
 
-      - name: Smoke-test built wheel
-        shell: bash
+      - name: Validate exact distribution set
+        run: >-
+          uv run python tools/release_check.py
+          --artifacts dist/*.whl dist/*.tar.gz
+          --write-checksums dist/SHA256SUMS
+
+      - name: Audit release artifacts
+        run: >-
+          uv run python tools/privacy_check.py
+          --history --artifacts dist/*.whl dist/*.tar.gz
+
+      - name: Smoke-test wheel and sdist outside checkout
+        env:
+          DIST_DIR: ${{ github.workspace }}/dist
         run: |
-          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
-          test -n "$wheel"
-          uv tool run --from "$wheel" countscape --help
+          set -euo pipefail
+          smoke_root="${RUNNER_TEMP}/countscape-smoke"
+          mkdir -p "${smoke_root}"
+          expected_version="$(uv run python tools/release_check.py --print-version)"
+          cd "${smoke_root}"
+          wheel=("${DIST_DIR}"/*.whl)
+          sdist=("${DIST_DIR}"/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          wheel_version="$(uv tool run --isolated --from "${wheel[0]}" countscape --version)"
+          test "${wheel_version}" = "countscape ${expected_version}"
+          uv tool run --isolated --from "${wheel[0]}" countscape --help
+          sdist_version="$(uv tool run --isolated --from "${sdist[0]}" countscape --version)"
+          test "${sdist_version}" = "countscape ${expected_version}"
+          uv tool run --isolated --from "${sdist[0]}" countscape --help
+
+      - name: Upload tested distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: countscape-distributions-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

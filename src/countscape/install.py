@@ -2,33 +2,37 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import secrets
 import subprocess
 import sys
 from collections.abc import Callable
-from contextlib import nullcontext, suppress
-from dataclasses import replace
+from contextlib import nullcontext
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from countscape.config import (
+    CONFIG_SCHEMA_VERSION,
     AppConfig,
     DisplayConfig,
+    RuntimeConfig,
     StyleConfig,
     WallpaperConfig,
     default_cache_directory,
     default_config_path,
     default_output_directory,
     default_photo_directory,
+    default_state_directory,
     load_config,
     parse_event,
     validate_config_location,
     validate_schedule_interval,
     validate_storage_paths,
-    xdg_config_home,
-    xdg_state_home,
+    xdg_cache_home,
+    xdg_data_home,
 )
 from countscape.display import build_canvas_layout
 from countscape.errors import ConfigError, IntegrationError, StateError
@@ -52,13 +56,74 @@ from countscape.state import (
 
 SERVICE_NAME = "countscape.service"
 TIMER_NAME = "countscape.timer"
+INSTALL_MANIFEST_SCHEMA_VERSION = 1
 Runner = Callable[..., subprocess.CompletedProcess[str]]
-_OUTPUT_RESERVED = frozenset({"render-state.json", "calibration.png"})
+_OUTPUT_RESERVED = frozenset({"render-state.json"})
 _CACHE_RESERVED = frozenset({"base.png", "base.json"})
 _UNIT_HEADER = (
-    "# Managed by Countscape. Changes will be replaced by "
-    "`countscape install`."
+    "# Managed by Countscape. Changes will be replaced by `countscape install`."
 )
+_INSTALL_MANIFEST_KEYS = frozenset(
+    {
+        "application",
+        "schema_version",
+        "installation_id",
+        "package_version",
+        "ownership_id",
+        "config_path",
+        "runtime_state_directory",
+        "unit_directory",
+        "service_path",
+        "timer_path",
+        "output_directory",
+        "cache_directory",
+        "python_executable",
+        "service_sha256",
+        "timer_sha256",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PackageEnvironment:
+    python: Path
+    version: str
+
+
+@dataclass(frozen=True, slots=True)
+class InstallManifest:
+    installation_id: str
+    package_version: str
+    ownership_id: str
+    config_path: Path
+    runtime_state_directory: Path
+    unit_directory: Path
+    service_path: Path
+    timer_path: Path
+    output_directory: Path
+    cache_directory: Path
+    python_executable: Path
+    service_sha256: str
+    timer_sha256: str
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "application": "countscape",
+            "schema_version": INSTALL_MANIFEST_SCHEMA_VERSION,
+            "installation_id": self.installation_id,
+            "package_version": self.package_version,
+            "ownership_id": self.ownership_id,
+            "config_path": str(self.config_path),
+            "runtime_state_directory": str(self.runtime_state_directory),
+            "unit_directory": str(self.unit_directory),
+            "service_path": str(self.service_path),
+            "timer_path": str(self.timer_path),
+            "output_directory": str(self.output_directory),
+            "cache_directory": str(self.cache_directory),
+            "python_executable": str(self.python_executable),
+            "service_sha256": self.service_sha256,
+            "timer_sha256": self.timer_sha256,
+        }
 
 
 def _toml_string(value: str) -> str:
@@ -68,6 +133,11 @@ def _toml_string(value: str) -> str:
 def dump_config(config: AppConfig, *, seed: str | None = None) -> str:
     selection_seed = seed or config.wallpaper.selection_seed
     lines = [
+        f"schema_version = {CONFIG_SCHEMA_VERSION}",
+        "",
+        "[runtime]",
+        f"state_directory = {_toml_string(str(config.runtime.state_directory))}",
+        "",
         "[event]",
         f"label = {_toml_string(config.event.label)}",
         f"target = {_toml_string(config.event.target.isoformat())}",
@@ -155,6 +225,7 @@ def initialize_config(
     source_directory: Path | None = None,
     output_directory: Path | None = None,
     cache_directory: Path | None = None,
+    state_directory: Path | None = None,
     countdown_refresh_seconds: int = 60,
     photo_rotation_seconds: int = 600,
     config_path: Path | None = None,
@@ -165,8 +236,27 @@ def initialize_config(
         raise ConfigError(f"configuration already exists: {path}; use --force")
     prior_seed: str | None = None
     if path.exists():
-        with suppress(ConfigError):
-            prior_seed = load_config(path).wallpaper.selection_seed
+        try:
+            prior_config = load_config(path)
+        except ConfigError:
+            prior_config = None
+        if prior_config is not None:
+            prior_seed = prior_config.wallpaper.selection_seed
+            prior_state = prior_config.runtime.state_directory
+            integration_paths = (
+                prior_state / "install.json",
+                prior_state / "gnome-background.json",
+                prior_state / "systemd" / SERVICE_NAME,
+                prior_state / "systemd" / TIMER_NAME,
+            )
+            if any(
+                candidate.exists() or candidate.is_symlink()
+                for candidate in integration_paths
+            ):
+                raise ConfigError(
+                    "configuration has active or unresolved integration state; "
+                    "run countscape uninstall before countscape init --force"
+                )
     event = parse_event(
         label=label,
         target=target,
@@ -176,6 +266,7 @@ def initialize_config(
     photos = (source_directory or default_photo_directory()).expanduser().resolve()
     output = (output_directory or default_output_directory()).expanduser().resolve()
     cache = (cache_directory or default_cache_directory()).expanduser().resolve()
+    state = (state_directory or default_state_directory()).expanduser().resolve()
     config = AppConfig(
         path=path,
         event=event,
@@ -200,9 +291,10 @@ def initialize_config(
             photo_fit="contain",
         ),
         display=DisplayConfig(mode="auto", fallback_profile=None, profiles={}),
+        runtime=RuntimeConfig(state_directory=state),
     )
-    validate_storage_paths(photos, output, cache)
-    validate_config_location(path, photos, output, cache)
+    validate_storage_paths(photos, output, cache, state)
+    validate_config_location(path, photos, output, cache, state)
     photos.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, dump_config(config))
     load_config(path)
@@ -286,12 +378,14 @@ def configure_settings(
         wallpaper.source_directory,
         wallpaper.output_directory,
         wallpaper.cache_directory,
+        config.runtime.state_directory,
     )
     validate_config_location(
         config.path,
         wallpaper.source_directory,
         wallpaper.output_directory,
         wallpaper.cache_directory,
+        config.runtime.state_directory,
     )
     updated = replace(
         config,
@@ -360,9 +454,7 @@ def unit_contents(
         photo_rotation_seconds,
     )
     calendar = (
-        f"*-*-* *:*:00/{polling_seconds}"
-        if polling_seconds < 60
-        else "*-*-* *:*:00"
+        f"*-*-* *:*:00/{polling_seconds}" if polling_seconds < 60 else "*-*-* *:*:00"
     )
     timer_lines = [
         _UNIT_HEADER,
@@ -413,31 +505,96 @@ def _systemctl(
     return result
 
 
-def _read_manifest(path: Path) -> dict[str, object] | None:
+def _required_manifest_string(data: dict[str, object], key: str) -> str:
+    value = data.get(key)
+    if not isinstance(value, str) or not value:
+        raise IntegrationError(f"Countscape install manifest has invalid {key}")
+    return value
+
+
+def _manifest_path(
+    data: dict[str, object],
+    key: str,
+    *,
+    resolve_symlinks: bool = True,
+) -> Path:
+    raw = _required_manifest_string(data, key)
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        raise IntegrationError(f"Countscape install manifest {key} must be absolute")
+    normalized = (
+        candidate.resolve() if resolve_symlinks else Path(os.path.abspath(candidate))
+    )
+    if str(normalized) != raw:
+        raise IntegrationError(f"Countscape install manifest {key} is not normalized")
+    return normalized
+
+
+def _manifest_digest(data: dict[str, object], key: str) -> str:
+    value = _required_manifest_string(data, key)
+    if len(value) != 64 or any(
+        character not in "0123456789abcdef" for character in value
+    ):
+        raise IntegrationError(f"Countscape install manifest has invalid {key}")
+    return value
+
+
+def _parse_manifest(data: dict[str, object]) -> InstallManifest:
+    if (
+        set(data) != _INSTALL_MANIFEST_KEYS
+        or data.get("application") != "countscape"
+        or not isinstance(data.get("schema_version"), int)
+        or isinstance(data.get("schema_version"), bool)
+        or data.get("schema_version") != INSTALL_MANIFEST_SCHEMA_VERSION
+    ):
+        raise IntegrationError(
+            "Countscape install manifest uses an unsupported schema; "
+            "pre-release install state is not migrated"
+        )
+    installation_id = _required_manifest_string(data, "installation_id")
+    if len(installation_id) != 32 or any(
+        character not in "0123456789abcdef" for character in installation_id
+    ):
+        raise IntegrationError(
+            "Countscape install manifest has invalid installation_id"
+        )
+    runtime_state_directory = _manifest_path(data, "runtime_state_directory")
+    unit_directory = _manifest_path(data, "unit_directory")
+    service_path = _manifest_path(data, "service_path")
+    timer_path = _manifest_path(data, "timer_path")
+    if service_path != unit_directory / SERVICE_NAME:
+        raise IntegrationError("Countscape install manifest has invalid service_path")
+    if timer_path != unit_directory / TIMER_NAME:
+        raise IntegrationError("Countscape install manifest has invalid timer_path")
+    if unit_directory != runtime_state_directory / "systemd":
+        raise IntegrationError("Countscape install manifest has invalid unit_directory")
+    return InstallManifest(
+        installation_id=installation_id,
+        package_version=_required_manifest_string(data, "package_version"),
+        ownership_id=_required_manifest_string(data, "ownership_id"),
+        config_path=_manifest_path(data, "config_path"),
+        runtime_state_directory=runtime_state_directory,
+        unit_directory=unit_directory,
+        service_path=service_path,
+        timer_path=timer_path,
+        output_directory=_manifest_path(data, "output_directory"),
+        cache_directory=_manifest_path(data, "cache_directory"),
+        python_executable=_manifest_path(
+            data,
+            "python_executable",
+            resolve_symlinks=False,
+        ),
+        service_sha256=_manifest_digest(data, "service_sha256"),
+        timer_sha256=_manifest_digest(data, "timer_sha256"),
+    )
+
+
+def _read_manifest(path: Path) -> InstallManifest | None:
     try:
-        return read_json_strict(path)
+        data = read_json_strict(path)
     except StateError as error:
         raise IntegrationError(str(error)) from error
-
-
-def _validate_manifest(manifest: dict[str, object]) -> None:
-    required_strings = (
-        "installation_id",
-        "ownership_id",
-        "config",
-        "service",
-        "timer",
-        "output_directory",
-        "cache_directory",
-        "python",
-        "service_sha256",
-        "timer_sha256",
-    )
-    if manifest.get("application") != "countscape" or not all(
-        isinstance(manifest.get(key), str) and manifest.get(key)
-        for key in required_strings
-    ):
-        raise IntegrationError("Countscape install manifest is invalid")
+    return _parse_manifest(data) if data is not None else None
 
 
 def _content_digest(text: str) -> str:
@@ -466,27 +623,271 @@ def _validate_unit_ownership(
         raise IntegrationError(f"systemd unit is not owned by this install: {path}")
 
 
-def _editable_install() -> bool:
+def _manager_unit_path(
+    unit_name: str,
+    *,
+    runner: Runner,
+) -> Path | None:
+    result = _systemctl(
+        ["show", "--property=FragmentPath", "--value", unit_name],
+        runner=runner,
+        tolerate_failure=True,
+    )
+    raw = result.stdout.strip()
+    if result.returncode != 0 or not raw:
+        return None
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        raise IntegrationError(
+            f"systemd returned a non-absolute unit path for {unit_name}"
+        )
+    return candidate.resolve()
+
+
+def _validate_manager_unit(
+    unit_name: str,
+    expected_path: Path,
+    *,
+    runner: Runner,
+    allow_missing: bool,
+) -> bool:
+    actual = _manager_unit_path(unit_name, runner=runner)
+    if actual is None:
+        if allow_missing:
+            return False
+        raise IntegrationError(f"systemd did not load the linked unit {unit_name}")
+    if actual != expected_path.resolve():
+        raise IntegrationError(
+            f"systemd unit {unit_name} is linked to a foreign path: {actual}"
+        )
+    return True
+
+
+def _remove_exact_file(
+    path: Path,
+    expected: bytes,
+    *,
+    description: str,
+) -> str | None:
+    """Remove a file created by this transaction only when it is unchanged."""
+    if path.is_symlink():
+        return f"preserved symbolic-link {description}: {path}"
     try:
-        direct_url = distribution("countscape").read_text("direct_url.json")
-    except PackageNotFoundError:
-        return False
-    if not direct_url:
-        return False
+        contents = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        return f"could not inspect {description} {path}: {error}"
+    if contents != expected:
+        return f"preserved changed {description}: {path}"
     try:
-        metadata = json.loads(direct_url)
-    except json.JSONDecodeError:
-        return False
-    directory = metadata.get("dir_info")
-    return isinstance(directory, dict) and directory.get("editable") is True
+        path.unlink()
+    except OSError as error:
+        return f"could not remove {description} {path}: {error}"
+    return None
+
+
+def _rollback_first_install(
+    *,
+    manifest_path: Path,
+    manifest_data: dict[str, object],
+    service_path: Path,
+    service: str,
+    timer_path: Path,
+    timer: str,
+    newly_linked_candidates: tuple[tuple[str, Path], ...],
+    runner: Runner,
+) -> list[str]:
+    """Best-effort rollback without removing files not created by this attempt."""
+    failures: list[str] = []
+    for unit_name, expected_path in newly_linked_candidates:
+        try:
+            linked = _validate_manager_unit(
+                unit_name,
+                expected_path,
+                runner=runner,
+                allow_missing=True,
+            )
+        except IntegrationError as error:
+            failures.append(str(error))
+            continue
+        if not linked:
+            continue
+        disabled = _systemctl(
+            ["disable", "--now", unit_name],
+            runner=runner,
+            tolerate_failure=True,
+        )
+        if disabled.returncode != 0:
+            detail = disabled.stderr.strip() or f"exit {disabled.returncode}"
+            failures.append(
+                f"could not remove new user-unit link {unit_name}: {detail}"
+            )
+
+    if newly_linked_candidates:
+        reloaded = _systemctl(["daemon-reload"], runner=runner, tolerate_failure=True)
+        if reloaded.returncode != 0:
+            detail = reloaded.stderr.strip() or f"exit {reloaded.returncode}"
+            failures.append(f"could not reload systemd during rollback: {detail}")
+
+    links_remaining = False
+    for unit_name, expected_path in newly_linked_candidates:
+        try:
+            linked = _validate_manager_unit(
+                unit_name,
+                expected_path,
+                runner=runner,
+                allow_missing=True,
+            )
+        except IntegrationError as error:
+            failures.append(str(error))
+            links_remaining = True
+        else:
+            if linked:
+                failures.append(f"new user-unit link remains loaded: {unit_name}")
+                links_remaining = True
+
+    # Keep the source files and manifest together if systemd still references them.
+    if links_remaining:
+        return failures
+
+    file_failures = [
+        failure
+        for failure in (
+            _remove_exact_file(
+                service_path,
+                service.encode(),
+                description="service source",
+            ),
+            _remove_exact_file(
+                timer_path,
+                timer.encode(),
+                description="timer source",
+            ),
+        )
+        if failure is not None
+    ]
+    failures.extend(file_failures)
+    if not file_failures:
+        manifest_text = json.dumps(manifest_data, indent=2, sort_keys=True) + "\n"
+        manifest_failure = _remove_exact_file(
+            manifest_path,
+            manifest_text.encode(),
+            description="install manifest",
+        )
+        if manifest_failure is not None:
+            failures.append(manifest_failure)
+    return failures
+
+
+def _installed_package_environment() -> PackageEnvironment:
+    try:
+        installed = distribution("countscape")
+    except PackageNotFoundError as error:
+        raise IntegrationError(
+            "install requires Countscape to be installed with `uv tool install`"
+        ) from error
+    direct_url = installed.read_text("direct_url.json")
+    if direct_url:
+        try:
+            metadata = json.loads(direct_url)
+        except json.JSONDecodeError as error:
+            raise IntegrationError(
+                "installed Countscape has invalid direct URL metadata"
+            ) from error
+        if not isinstance(metadata, dict):
+            raise IntegrationError(
+                "installed Countscape has invalid direct URL metadata"
+            )
+        directory = metadata.get("dir_info")
+        if isinstance(directory, dict) and directory.get("editable") is True:
+            raise IntegrationError(
+                "install refuses an editable or source-checkout environment; "
+                "install Countscape with `uv tool install`"
+            )
+
+    environment = Path(sys.prefix).expanduser().absolute()
+    python = Path(sys.executable).expanduser().absolute()
+    configured_tool_directory = os.environ.get("UV_TOOL_DIR")
+    tool_directory = (
+        Path(configured_tool_directory).expanduser().absolute()
+        if configured_tool_directory
+        else xdg_data_home() / "uv" / "tools"
+    )
+    configured_cache_directory = os.environ.get("UV_CACHE_DIR")
+    cache_directory = (
+        Path(configured_cache_directory).expanduser().absolute()
+        if configured_cache_directory
+        else xdg_cache_home() / "uv"
+    )
+    if environment == cache_directory or environment.is_relative_to(cache_directory):
+        raise IntegrationError(
+            "install refuses an ephemeral `uvx` environment; "
+            "install Countscape with `uv tool install`"
+        )
+    if environment.parent != tool_directory:
+        raise IntegrationError(
+            "install requires a durable `uv tool install` environment; "
+            "the active environment is outside the uv tool directory"
+        )
+    receipt = environment / "uv-receipt.toml"
+    if receipt.is_symlink() or not receipt.is_file():
+        raise IntegrationError(
+            "install requires a durable `uv tool install` environment; "
+            "editable checkouts and ephemeral `uvx` environments are unsupported"
+        )
+    if not python.is_relative_to(environment) or not python.is_file():
+        raise IntegrationError(
+            "installed Python executable is outside the durable tool environment"
+        )
+    package_location = Path(installed.locate_file("")).expanduser().absolute()
+    if not package_location.is_relative_to(environment):
+        raise IntegrationError(
+            "installed Countscape package is outside the durable tool environment"
+        )
+    if not isinstance(installed.version, str) or not installed.version:
+        raise IntegrationError("installed Countscape has no package version")
+    return PackageEnvironment(python=python, version=installed.version)
+
+
+def _runtime_state_directory(
+    requested: Path,
+    *,
+    config: AppConfig | None = None,
+) -> Path:
+    path = requested.expanduser().resolve()
+    if path == Path(path.anchor) or path == Path.home().resolve():
+        raise IntegrationError(
+            f"runtime state must use a dedicated subdirectory: {path}"
+        )
+    if config is not None:
+        for name, managed in (
+            ("photo", config.wallpaper.source_directory),
+            ("output", config.wallpaper.output_directory),
+            ("cache", config.wallpaper.cache_directory),
+        ):
+            directory = managed.resolve()
+            if (
+                path == directory
+                or path.is_relative_to(directory)
+                or directory.is_relative_to(path)
+            ):
+                raise IntegrationError(
+                    f"runtime state and {name} directories must not overlap"
+                )
+        if config.path == path or config.path.is_relative_to(path):
+            raise IntegrationError(
+                "configuration must not be stored inside the runtime state directory"
+            )
+    return path
 
 
 def install(
     *,
     config_path: Path | None = None,
-    executable: Path | None = None,
     start: bool = True,
     runner: Runner = subprocess.run,
+    _environment: PackageEnvironment | None = None,
 ) -> Path:
     config = load_config(config_path)
 
@@ -495,22 +896,19 @@ def install(
     layout = discover_layout(config.display)
     build_canvas_layout(layout, max_pixels=config.wallpaper.max_canvas_pixels)
     resolve_font(config.style.font)
-    python = (executable or Path(sys.executable)).expanduser().resolve()
+    environment = _environment or _installed_package_environment()
+    python = environment.python.expanduser().absolute()
     if not python.is_file():
         raise IntegrationError(f"installed Python executable is missing: {python}")
-    if executable is None and _editable_install():
-        raise IntegrationError(
-            "install requires a persistent package environment; install Countscape "
-            "with `uv tool install` instead of running from an editable checkout"
-        )
 
-    unit_dir = xdg_config_home() / "systemd" / "user"
-    service_path = unit_dir / SERVICE_NAME
-    timer_path = unit_dir / TIMER_NAME
-    state_dir = xdg_state_home() / "countscape"
+    state_dir = _runtime_state_directory(config.runtime.state_directory, config=config)
     manifest_path = state_dir / "install.json"
     prior_manifest = _read_manifest(manifest_path)
+    first_install = prior_manifest is None
     if prior_manifest is None:
+        unit_dir = state_dir / "systemd"
+        service_path = unit_dir / SERVICE_NAME
+        timer_path = unit_dir / TIMER_NAME
         for path in (service_path, timer_path):
             if path.exists() or path.is_symlink():
                 raise IntegrationError(
@@ -518,18 +916,60 @@ def install(
                 )
         installation_id = secrets.token_hex(16)
     else:
-        _validate_manifest(prior_manifest)
+        if prior_manifest.runtime_state_directory != state_dir:
+            raise IntegrationError(
+                "existing install uses a different runtime state directory"
+            )
+        expected_identity = (
+            ("configuration", prior_manifest.config_path, config.path),
+            (
+                "output directory",
+                prior_manifest.output_directory,
+                config.wallpaper.output_directory,
+            ),
+            (
+                "cache directory",
+                prior_manifest.cache_directory,
+                config.wallpaper.cache_directory,
+            ),
+        )
+        for name, installed_value, requested_value in expected_identity:
+            if installed_value != requested_value:
+                raise IntegrationError(
+                    f"existing install uses a different {name}; "
+                    "uninstall it before changing installation ownership"
+                )
+        if prior_manifest.ownership_id != config.wallpaper.selection_seed:
+            raise IntegrationError(
+                "existing install belongs to a different configuration identity"
+            )
+        unit_dir = prior_manifest.unit_directory
+        service_path = prior_manifest.service_path
+        timer_path = prior_manifest.timer_path
         _validate_unit_ownership(
             service_path,
-            prior_manifest["service_sha256"],
+            prior_manifest.service_sha256,
         )
         _validate_unit_ownership(
             timer_path,
-            prior_manifest["timer_sha256"],
+            prior_manifest.timer_sha256,
         )
-        installation_id = str(prior_manifest["installation_id"])
+        installation_id = prior_manifest.installation_id
 
     ownership_id = config.wallpaper.selection_seed
+    missing_links = tuple(
+        (unit_name, path)
+        for unit_name, path in (
+            (SERVICE_NAME, service_path),
+            (TIMER_NAME, timer_path),
+        )
+        if not _validate_manager_unit(
+            unit_name,
+            path,
+            runner=runner,
+            allow_missing=True,
+        )
+    )
     ensure_owned_directory(
         config.wallpaper.output_directory,
         kind="output",
@@ -549,44 +989,69 @@ def install(
         countdown_refresh_seconds=config.wallpaper.countdown_refresh_seconds,
         photo_rotation_seconds=config.wallpaper.photo_rotation_seconds,
     )
-    atomic_write_text(service_path, service)
-    atomic_write_text(timer_path, timer)
-    atomic_write_json(
-        manifest_path,
-        {
-            "application": "countscape",
-            "installation_id": installation_id,
-            "ownership_id": ownership_id,
-            "config": str(config.path),
-            "service": str(service_path),
-            "timer": str(timer_path),
-            "output_directory": str(config.wallpaper.output_directory),
-            "cache_directory": str(config.wallpaper.cache_directory),
-            "python": str(python),
-            "service_sha256": _content_digest(service),
-            "timer_sha256": _content_digest(timer),
-        },
-    )
-    _systemctl(["daemon-reload"], runner=runner)
-    if start:
-        _systemctl(["enable", TIMER_NAME], runner=runner)
-        _systemctl(["restart", TIMER_NAME], runner=runner)
+    manifest_data = InstallManifest(
+        installation_id=installation_id,
+        package_version=environment.version,
+        ownership_id=ownership_id,
+        config_path=config.path,
+        runtime_state_directory=state_dir,
+        unit_directory=unit_dir,
+        service_path=service_path,
+        timer_path=timer_path,
+        output_directory=config.wallpaper.output_directory,
+        cache_directory=config.wallpaper.cache_directory,
+        python_executable=python,
+        service_sha256=_content_digest(service),
+        timer_sha256=_content_digest(timer),
+    ).as_json()
+    try:
+        atomic_write_text(service_path, service)
+        atomic_write_text(timer_path, timer)
+        atomic_write_json(manifest_path, manifest_data)
+        if missing_links:
+            _systemctl(
+                ["link", *(str(path) for _name, path in missing_links)],
+                runner=runner,
+            )
+        _systemctl(["daemon-reload"], runner=runner)
+        for unit_name, path in (
+            (SERVICE_NAME, service_path),
+            (TIMER_NAME, timer_path),
+        ):
+            _validate_manager_unit(
+                unit_name,
+                path,
+                runner=runner,
+                allow_missing=False,
+            )
+        if start:
+            _systemctl(["enable", TIMER_NAME], runner=runner)
+            _systemctl(["restart", TIMER_NAME], runner=runner)
+    except Exception as error:
+        if not first_install:
+            raise
+        rollback_failures = _rollback_first_install(
+            manifest_path=manifest_path,
+            manifest_data=manifest_data,
+            service_path=service_path,
+            service=service,
+            timer_path=timer_path,
+            timer=timer,
+            newly_linked_candidates=missing_links,
+            runner=runner,
+        )
+        detail = f"Countscape installation failed and was rolled back: {error}"
+        if rollback_failures:
+            detail += "; rollback incomplete: " + "; ".join(rollback_failures)
+        raise IntegrationError(detail) from error
     return config.path
 
 
 def _owned_directory_from_state(
-    manifest: dict[str, object],
-    key: str,
+    manifest: InstallManifest,
+    path: Path,
     kind: str,
 ) -> Path | None:
-    ownership_id = manifest.get("ownership_id")
-    raw = manifest.get(key)
-    if not isinstance(ownership_id, str) or not isinstance(raw, str):
-        raise IntegrationError("Countscape install manifest is missing ownership data")
-    candidate = Path(raw)
-    if not candidate.is_absolute():
-        raise IntegrationError("managed directories in install state must be absolute")
-    path = candidate.resolve()
     if path == Path(path.anchor) or path == Path.home().resolve():
         raise IntegrationError(f"refusing unsafe managed directory: {path}")
     if not path.exists():
@@ -595,7 +1060,7 @@ def _owned_directory_from_state(
         owned = validate_owned_directory(
             path,
             kind=kind,
-            ownership_id=ownership_id,
+            ownership_id=manifest.ownership_id,
         )
     except StateError as error:
         raise IntegrationError(str(error)) from error
@@ -604,61 +1069,157 @@ def _owned_directory_from_state(
     return owned
 
 
-def uninstall(*, runner: Runner = subprocess.run) -> bool:
-    state_dir = xdg_state_home() / "countscape"
+def _require_background_restored(state_directory: Path) -> None:
+    gnome_state = state_directory / "gnome-background.json"
+    if gnome_state.exists() or gnome_state.is_symlink():
+        raise IntegrationError(
+            "wallpaper restoration is unresolved; choose another wallpaper "
+            "and run uninstall again"
+        )
+
+
+def uninstall(
+    *,
+    config_path: Path | None = None,
+    state_directory: Path | None = None,
+    runner: Runner = subprocess.run,
+) -> bool:
+    config: AppConfig | None = None
+    if state_directory is None:
+        config = load_config(config_path)
+        state_dir = _runtime_state_directory(
+            config.runtime.state_directory,
+            config=config,
+        )
+    else:
+        state_dir = _runtime_state_directory(state_directory)
     manifest_path = state_dir / "install.json"
     manifest = _read_manifest(manifest_path)
     if manifest is None:
-        return restore_background(runner=runner, state_directory=state_dir)
-    _validate_manifest(manifest)
+        restored = restore_background(runner=runner, state_directory=state_dir)
+        _require_background_restored(state_dir)
+        return restored
+    if manifest.runtime_state_directory != state_dir:
+        raise IntegrationError(
+            "Countscape install manifest belongs to a different runtime state directory"
+        )
+    if config is not None:
+        expected_identity = (
+            ("configuration path", manifest.config_path, config.path),
+            (
+                "selection ownership",
+                manifest.ownership_id,
+                config.wallpaper.selection_seed,
+            ),
+            (
+                "output directory",
+                manifest.output_directory,
+                config.wallpaper.output_directory,
+            ),
+            (
+                "cache directory",
+                manifest.cache_directory,
+                config.wallpaper.cache_directory,
+            ),
+        )
+        for name, installed_value, configured_value in expected_identity:
+            if installed_value != configured_value:
+                raise IntegrationError(
+                    f"installed {name} does not match this configuration; "
+                    "use the installed configuration or the explicit "
+                    "--state-directory recovery override"
+                )
 
-    unit_dir = xdg_config_home() / "systemd" / "user"
-    service_path = unit_dir / SERVICE_NAME
-    timer_path = unit_dir / TIMER_NAME
-    if Path(str(manifest["service"])) != service_path or Path(
-        str(manifest["timer"])
-    ) != timer_path:
-        raise IntegrationError("Countscape install manifest has unexpected unit paths")
-    _validate_unit_ownership(service_path, manifest["service_sha256"])
-    _validate_unit_ownership(timer_path, manifest["timer_sha256"])
-    output = _owned_directory_from_state(manifest, "output_directory", "output")
-    cache = _owned_directory_from_state(manifest, "cache_directory", "cache")
+    service_path = manifest.service_path
+    timer_path = manifest.timer_path
+    _validate_unit_ownership(service_path, manifest.service_sha256)
+    _validate_unit_ownership(timer_path, manifest.timer_sha256)
+    output = _owned_directory_from_state(
+        manifest,
+        manifest.output_directory,
+        "output",
+    )
+    cache = _owned_directory_from_state(
+        manifest,
+        manifest.cache_directory,
+        "cache",
+    )
 
-    disabled = _systemctl(
-        ["disable", "--now", TIMER_NAME],
+    timer_linked = _validate_manager_unit(
+        TIMER_NAME,
+        timer_path,
         runner=runner,
-        tolerate_failure=True,
+        allow_missing=True,
     )
-    if disabled.returncode != 0:
-        detail = disabled.stderr.strip() or f"exit {disabled.returncode}"
-        raise IntegrationError(f"could not disable Countscape timer: {detail}")
-    stopped = _systemctl(
-        ["stop", SERVICE_NAME],
+    service_linked = _validate_manager_unit(
+        SERVICE_NAME,
+        service_path,
         runner=runner,
-        tolerate_failure=True,
+        allow_missing=True,
     )
-    if stopped.returncode != 0:
-        detail = stopped.stderr.strip() or f"exit {stopped.returncode}"
-        raise IntegrationError(f"could not stop Countscape service: {detail}")
+
+    if timer_linked:
+        disabled = _systemctl(
+            ["disable", "--now", TIMER_NAME],
+            runner=runner,
+            tolerate_failure=True,
+        )
+        if disabled.returncode != 0:
+            detail = disabled.stderr.strip() or f"exit {disabled.returncode}"
+            raise IntegrationError(f"could not disable Countscape timer: {detail}")
+    if service_linked:
+        stopped = _systemctl(
+            ["stop", SERVICE_NAME],
+            runner=runner,
+            tolerate_failure=True,
+        )
+        if stopped.returncode != 0:
+            detail = stopped.stderr.strip() or f"exit {stopped.returncode}"
+            raise IntegrationError(f"could not stop Countscape service: {detail}")
+        disabled = _systemctl(
+            ["disable", SERVICE_NAME],
+            runner=runner,
+            tolerate_failure=True,
+        )
+        if disabled.returncode != 0:
+            detail = disabled.stderr.strip() or f"exit {disabled.returncode}"
+            raise IntegrationError(f"could not disable Countscape service: {detail}")
 
     lock = operation_lock(output) if output is not None else nullcontext()
     with lock:
         restored = restore_background(runner=runner, state_directory=state_dir)
-        gnome_state = state_dir / "gnome-background.json"
-        if gnome_state.exists() or gnome_state.is_symlink():
-            raise IntegrationError(
-                "wallpaper restoration is unresolved; choose another wallpaper "
-                "and run uninstall again"
-            )
+        _require_background_restored(state_dir)
         referenced = {
             path.resolve() for path in current_background_paths(runner=runner)
         }
+        if cache is not None:
+            cached_base = cache / "base.png"
+            if (
+                cached_base.exists() or cached_base.is_symlink()
+            ) and cached_base.resolve() in referenced:
+                raise IntegrationError(
+                    "a Countscape cache image remains referenced by GNOME; "
+                    "choose another wallpaper and run uninstall again"
+                )
         if output is not None:
+            generated_references = [
+                path
+                for path in output.iterdir()
+                if (
+                    GENERATED_WALLPAPER_NAME.fullmatch(path.name)
+                    or GENERATED_CALIBRATION_NAME.fullmatch(path.name)
+                )
+                and path.resolve() in referenced
+            ]
+            if generated_references:
+                raise IntegrationError(
+                    "a generated Countscape output remains referenced by GNOME; "
+                    "choose another wallpaper and run uninstall again"
+                )
             for path in output.iterdir():
                 if (
                     GENERATED_WALLPAPER_NAME.fullmatch(path.name)
                     or GENERATED_CALIBRATION_NAME.fullmatch(path.name)
-                    or path.name == "calibration.png"
                 ) and path.resolve() not in referenced:
                     path.unlink(missing_ok=True)
             (output / "render-state.json").unlink(missing_ok=True)
@@ -670,12 +1231,37 @@ def uninstall(*, runner: Runner = subprocess.run) -> bool:
         (output / ".countscape.lock").unlink(missing_ok=True)
     service_path.unlink(missing_ok=True)
     timer_path.unlink(missing_ok=True)
-    _systemctl(["daemon-reload"], runner=runner, tolerate_failure=True)
+    _systemctl(["daemon-reload"], runner=runner)
+    for name, expected_path in (
+        (SERVICE_NAME, service_path),
+        (TIMER_NAME, timer_path),
+    ):
+        if _validate_manager_unit(
+            name,
+            expected_path,
+            runner=runner,
+            allow_missing=True,
+        ):
+            raise IntegrationError(
+                f"could not remove Countscape user-unit link for {name}"
+            )
     manifest_path.unlink(missing_ok=True)
     return restored
 
 
-def timer_status(*, runner: Runner = subprocess.run) -> dict[str, str | bool]:
+def timer_status(
+    *,
+    state_directory: Path,
+    runner: Runner = subprocess.run,
+) -> dict[str, str | bool]:
+    state_dir = _runtime_state_directory(state_directory)
+    manifest = _read_manifest(state_dir / "install.json")
+    if manifest is None:
+        return {"active": False, "detail": "not installed"}
+    if manifest.runtime_state_directory != state_dir:
+        raise IntegrationError(
+            "Countscape install manifest belongs to a different runtime state directory"
+        )
     result = _systemctl(
         ["is-active", TIMER_NAME],
         runner=runner,

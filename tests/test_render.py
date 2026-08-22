@@ -9,7 +9,7 @@ from conftest import make_image, write_config
 from PIL import Image, ImageChops
 
 from countscape.config import AppConfig, load_config
-from countscape.errors import CountdownError
+from countscape.errors import CountdownError, StateError
 from countscape.models import (
     DisplayLayout,
     LogicalMonitor,
@@ -434,9 +434,7 @@ def test_photo_base_changes_only_at_bucket_boundary(tmp_path: Path) -> None:
     start = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
     first_output = render_wallpaper(config, layout, now=start)
     first = read_json(config.wallpaper.cache_directory / "base.json")
-    first_render = read_json(
-        config.wallpaper.output_directory / "render-state.json"
-    )
+    first_render = read_json(config.wallpaper.output_directory / "render-state.json")
     render_wallpaper(config, layout, now=start + timedelta(minutes=1))
     same = read_json(config.wallpaper.cache_directory / "base.json")
     changed_output = render_wallpaper(
@@ -445,9 +443,7 @@ def test_photo_base_changes_only_at_bucket_boundary(tmp_path: Path) -> None:
         now=start + timedelta(minutes=10),
     )
     changed = read_json(config.wallpaper.cache_directory / "base.json")
-    changed_render = read_json(
-        config.wallpaper.output_directory / "render-state.json"
-    )
+    changed_render = read_json(config.wallpaper.output_directory / "render-state.json")
     assert first == same
     assert changed_render["bucket"] == first_render["bucket"] + 1
     assert changed["selected"] != first["selected"]
@@ -464,16 +460,12 @@ def test_photo_base_supports_five_second_bucket_boundary(tmp_path: Path) -> None
 
     render_wallpaper(config, layout, now=start)
     first = read_json(config.wallpaper.cache_directory / "base.json")
-    first_render = read_json(
-        config.wallpaper.output_directory / "render-state.json"
-    )
+    first_render = read_json(config.wallpaper.output_directory / "render-state.json")
     render_wallpaper(config, layout, now=start + timedelta(seconds=4))
     same = read_json(config.wallpaper.cache_directory / "base.json")
     render_wallpaper(config, layout, now=start + timedelta(seconds=5))
     changed = read_json(config.wallpaper.cache_directory / "base.json")
-    changed_render = read_json(
-        config.wallpaper.output_directory / "render-state.json"
-    )
+    changed_render = read_json(config.wallpaper.output_directory / "render-state.json")
 
     assert first == same
     assert changed_render["bucket"] == first_render["bucket"] + 1
@@ -511,6 +503,29 @@ def test_corrupt_cache_is_rebuilt(configured_project: tuple[AppConfig, Path]) ->
     render_wallpaper(config, layout, now=now + timedelta(minutes=1))
     with Image.open(base) as image:
         assert image.size == (800, 600)
+
+
+def test_pre_release_render_state_schema_is_rejected(
+    configured_project: tuple[AppConfig, Path],
+) -> None:
+    config, _source = configured_project
+    layout = discover_layout(config.display)
+    state_path = config.wallpaper.output_directory / "render-state.json"
+    render_wallpaper(
+        config,
+        layout,
+        now=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+    )
+    state_path.write_text('{"version": 1}\n', encoding="utf-8")
+
+    with pytest.raises(StateError, match="unsupported schema"):
+        render_wallpaper(
+            config,
+            layout,
+            now=datetime(2026, 8, 1, 12, 1, tzinfo=UTC),
+        )
+
+    assert state_path.read_text(encoding="utf-8") == '{"version": 1}\n'
 
 
 def test_failed_save_keeps_previous_output(

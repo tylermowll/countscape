@@ -13,6 +13,7 @@ from typing import Any
 from countscape.errors import CountdownError, StateError
 
 OWNERSHIP_MARKER = ".countscape-owned.json"
+OWNERSHIP_MARKER_SCHEMA_VERSION = 1
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -83,6 +84,7 @@ def ensure_owned_directory(
     existing = read_json_strict(marker)
     expected = {
         "application": "countscape",
+        "schema_version": OWNERSHIP_MARKER_SCHEMA_VERSION,
         "kind": kind,
         "ownership_id": ownership_id,
     }
@@ -114,6 +116,7 @@ def validate_owned_directory(
     existing = read_json_strict(marker)
     expected = {
         "application": "countscape",
+        "schema_version": OWNERSHIP_MARKER_SCHEMA_VERSION,
         "kind": kind,
         "ownership_id": ownership_id,
     }

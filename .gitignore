@@ -33,8 +33,3 @@ venv/
 
 # === Runtime output ===
 *.log
-/var/
-
-# === User-supplied photos ===
-assets/backgrounds/*
-!assets/backgrounds/.gitkeep

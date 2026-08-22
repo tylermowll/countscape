@@ -1,0 +1,10 @@
+[run]
+branch = True
+relative_files = True
+source = countscape
+
+[report]
+fail_under = 90
+precision = 1
+show_missing = True
+skip_covered = True

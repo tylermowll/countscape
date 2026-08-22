@@ -44,8 +44,7 @@ def test_arrival_boundary_never_goes_negative(now: datetime) -> None:
 def test_same_instant_in_another_zone() -> None:
     now_utc = (TARGET - timedelta(hours=1)).astimezone(UTC)
     assert (
-        calculate_countdown(now_utc, TARGET, "It's here!").text
-        == "1 hour · 0 minutes"
+        calculate_countdown(now_utc, TARGET, "It's here!").text == "1 hour · 0 minutes"
     )
 
 

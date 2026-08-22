@@ -7,7 +7,6 @@ from contextlib import suppress
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from countscape.config import xdg_state_home
 from countscape.errors import IntegrationError, StateError
 from countscape.state import atomic_write_json, read_json_strict
 
@@ -15,11 +14,17 @@ SCHEMA = "org.gnome.desktop.background"
 KEYS = ("picture-uri", "picture-uri-dark", "picture-options")
 URI_KEYS = ("picture-uri", "picture-uri-dark")
 MAX_MANAGED_URI_HISTORY = 64
+GNOME_STATE_SCHEMA_VERSION = 1
 Runner = Callable[..., subprocess.CompletedProcess[str]]
-
-
-def integration_state_directory() -> Path:
-    return xdg_state_home() / "countscape"
+_GNOME_STATE_REQUIRED_KEYS = frozenset(
+    {
+        "application",
+        "schema_version",
+        "original",
+        "managed_uris",
+    }
+)
+_GNOME_STATE_ALLOWED_KEYS = _GNOME_STATE_REQUIRED_KEYS | {"last_applied", "pending"}
 
 
 def _run_gsettings(
@@ -70,8 +75,10 @@ def set_background_settings(
 
 
 def _valid_settings(value: object) -> bool:
-    return isinstance(value, dict) and all(
-        isinstance(value.get(key), str) for key in KEYS
+    return (
+        isinstance(value, dict)
+        and set(value) == set(KEYS)
+        and all(isinstance(value[key], str) for key in KEYS)
     )
 
 
@@ -101,10 +108,22 @@ def _unlink_integration_state(path: Path) -> None:
 
 
 def _validate_integration_state(state: dict[str, object]) -> None:
+    if (
+        set(state) - _GNOME_STATE_ALLOWED_KEYS
+        or not _GNOME_STATE_REQUIRED_KEYS.issubset(state)
+        or state.get("application") != "countscape"
+        or not isinstance(state.get("schema_version"), int)
+        or isinstance(state.get("schema_version"), bool)
+        or state.get("schema_version") != GNOME_STATE_SCHEMA_VERSION
+    ):
+        raise IntegrationError(
+            "GNOME integration state uses an unsupported schema; "
+            "pre-release state is not migrated"
+        )
     original = state.get("original")
     if original is not None and not _valid_settings(original):
         raise IntegrationError("GNOME integration state has an invalid original")
-    managed = state.get("managed_uris", [])
+    managed = state["managed_uris"]
     if not isinstance(managed, list) or not all(
         isinstance(value, str) for value in managed
     ):
@@ -115,6 +134,7 @@ def _validate_integration_state(state: dict[str, object]) -> None:
     pending = state.get("pending")
     if pending is not None and (
         not isinstance(pending, dict)
+        or set(pending) != {"desired", "prior"}
         or not _valid_settings(pending.get("desired"))
         or not _valid_settings(pending.get("prior"))
     ):
@@ -134,11 +154,7 @@ def _rollback_settings(values: dict[str, str], *, runner: Runner) -> bool:
 def _settings_uris(value: object) -> tuple[str, ...]:
     if not isinstance(value, dict):
         return ()
-    return tuple(
-        uri
-        for key in URI_KEYS
-        if isinstance((uri := value.get(key)), str)
-    )
+    return tuple(uri for key in URI_KEYS if isinstance((uri := value.get(key)), str))
 
 
 def _compact_managed_uris(
@@ -162,12 +178,12 @@ def apply_wallpaper(
     path: Path,
     *,
     multi_monitor: bool,
+    state_directory: Path,
     runner: Runner = subprocess.run,
-    state_directory: Path | None = None,
 ) -> None:
     if not path.is_file():
         raise IntegrationError(f"rendered wallpaper does not exist: {path}")
-    state_dir = state_directory or integration_state_directory()
+    state_dir = state_directory.expanduser().resolve()
     state_path = state_dir / "gnome-background.json"
     loaded = _read_integration_state(state_path)
     state: dict[str, object]
@@ -182,7 +198,8 @@ def apply_wallpaper(
     if loaded is None:
         original: dict[str, str] | None = prior if prior != desired else None
         state = {
-            "version": 1,
+            "application": "countscape",
+            "schema_version": GNOME_STATE_SCHEMA_VERSION,
             "original": original,
             "managed_uris": [],
         }
@@ -256,10 +273,10 @@ def _managed_uris(state: dict[str, object]) -> set[str]:
 
 def restore_background(
     *,
+    state_directory: Path,
     runner: Runner = subprocess.run,
-    state_directory: Path | None = None,
 ) -> bool:
-    state_dir = state_directory or integration_state_directory()
+    state_dir = state_directory.expanduser().resolve()
     state_path = state_dir / "gnome-background.json"
     state = _read_integration_state(state_path)
     if state is None:
@@ -267,9 +284,6 @@ def restore_background(
     _validate_integration_state(state)
     managed = _managed_uris(state)
     if not managed:
-        if state.get("version") == 1 and state.get("pending") is None:
-            _unlink_integration_state(state_path)
-            return False
         raise IntegrationError("GNOME integration state has no managed wallpaper")
     original = state.get("original")
     current = get_background_settings(runner=runner)
@@ -297,10 +311,7 @@ def restore_background(
                 managed_option = desired.get("picture-options")
         uris_resolved = all(
             isinstance(original.get(key), str)
-            and (
-                key in restore
-                or current.get(key) == original.get(key)
-            )
+            and (key in restore or current.get(key) == original.get(key))
             for key in URI_KEYS
         )
         if (
@@ -328,17 +339,15 @@ def _paths_from_settings(settings: dict[str, str]) -> tuple[Path, ...]:
     return tuple(paths)
 
 
-def current_background_paths(
-    *, runner: Runner = subprocess.run
-) -> tuple[Path, ...]:
+def current_background_paths(*, runner: Runner = subprocess.run) -> tuple[Path, ...]:
     return _paths_from_settings(get_background_settings(runner=runner))
 
 
 def managed_output_paths(
     *,
-    state_directory: Path | None = None,
+    state_directory: Path,
 ) -> tuple[Path, ...]:
-    state_dir = state_directory or integration_state_directory()
+    state_dir = state_directory.expanduser().resolve()
     state = _read_integration_state(state_dir / "gnome-background.json")
     if state is None:
         return ()
@@ -356,9 +365,9 @@ def managed_output_paths(
 
 def protected_output_paths(
     *,
-    state_directory: Path | None = None,
+    state_directory: Path,
 ) -> tuple[Path, ...]:
-    state_dir = state_directory or integration_state_directory()
+    state_dir = state_directory.expanduser().resolve()
     state = _read_integration_state(state_dir / "gnome-background.json")
     if state is None:
         return ()

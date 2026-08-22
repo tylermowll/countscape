@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from countscape.errors import ConfigError
 from countscape.models import DisplayLayout, LogicalMonitor, PhysicalMonitor
 
+CONFIG_SCHEMA_VERSION = 1
+
 
 @dataclass(frozen=True, slots=True)
 class EventConfig:
@@ -50,12 +52,18 @@ class DisplayConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeConfig:
+    state_directory: Path
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     path: Path
     event: EventConfig
     wallpaper: WallpaperConfig
     style: StyleConfig
     display: DisplayConfig
+    runtime: RuntimeConfig
 
 
 def _xdg_path(variable: str, fallback: Path) -> Path:
@@ -99,11 +107,26 @@ def default_cache_directory() -> Path:
     return xdg_cache_home() / "countscape"
 
 
+def default_state_directory() -> Path:
+    return xdg_state_home() / "countscape"
+
+
 def _table(data: dict[str, Any], name: str) -> dict[str, Any]:
     value = data.get(name)
     if not isinstance(value, dict):
         raise ConfigError(f"missing [{name}] table")
     return value
+
+
+def _reject_unknown_keys(
+    data: dict[str, Any],
+    allowed: frozenset[str],
+    context: str,
+) -> None:
+    unknown = sorted(set(data) - allowed)
+    if unknown:
+        names = ", ".join(unknown)
+        raise ConfigError(f"{context} contains unknown configuration keys: {names}")
 
 
 def _string(data: dict[str, Any], name: str, *, allow_empty: bool = False) -> str:
@@ -131,9 +154,7 @@ def _integer(
 def validate_schedule_interval(value: int, name: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise ConfigError(f"{name} must be an integer of at least 1")
-    aligned = (value < 60 and 60 % value == 0) or (
-        value >= 60 and value % 60 == 0
-    )
+    aligned = (value < 60 and 60 % value == 0) or (value >= 60 and value % 60 == 0)
     if not aligned:
         raise ConfigError(
             f"{name} must evenly divide one minute or be a whole number of minutes"
@@ -164,7 +185,7 @@ def _number(
 
 
 def _coordinate(data: dict[str, Any], name: str) -> float:
-    value = data.get(name, 0)
+    value = data.get(name)
     if not isinstance(value, int | float) or isinstance(value, bool):
         raise ConfigError(f"{name} must be a number")
     converted = float(value)
@@ -196,18 +217,31 @@ def _display_text(value: str, name: str) -> str:
     return cleaned
 
 
-def validate_storage_paths(source: Path, output: Path, cache: Path) -> None:
+def validate_storage_paths(
+    source: Path,
+    output: Path,
+    cache: Path,
+    state: Path,
+) -> None:
     paths = {
         "photo": source.resolve(),
         "output": output.resolve(),
         "cache": cache.resolve(),
+        "state": state.resolve(),
     }
     home = Path.home().resolve()
-    for name in ("output", "cache"):
+    for name in ("output", "cache", "state"):
         path = paths[name]
         if path == Path(path.anchor) or path == home:
             raise ConfigError(f"{name} directory must be a dedicated subdirectory")
-    pairs = (("photo", "output"), ("photo", "cache"), ("output", "cache"))
+    pairs = (
+        ("photo", "output"),
+        ("photo", "cache"),
+        ("photo", "state"),
+        ("output", "cache"),
+        ("output", "state"),
+        ("cache", "state"),
+    )
     for first_name, second_name in pairs:
         first = paths[first_name]
         second = paths[second_name]
@@ -226,18 +260,23 @@ def validate_config_location(
     source: Path,
     output: Path,
     cache: Path,
+    state: Path,
 ) -> None:
     path = config_path.resolve()
+    config_directory = path.parent
     for name, directory in (
         ("photo", source),
         ("output", output),
         ("cache", cache),
+        ("state", state),
     ):
         root = directory.resolve()
-        if path == root or path.is_relative_to(root):
-            raise ConfigError(
-                f"configuration file must not be inside the {name} directory"
-            )
+        if (
+            config_directory == root
+            or config_directory.is_relative_to(root)
+            or root.is_relative_to(config_directory)
+        ):
+            raise ConfigError(f"configuration and {name} directories must not overlap")
 
 
 def parse_event(
@@ -248,9 +287,7 @@ def parse_event(
     after_arrival_message: str,
 ) -> EventConfig:
     clean_label = _display_text(label, "event.label")
-    clean_message = _display_text(
-        after_arrival_message, "event.after_arrival_message"
-    )
+    clean_message = _display_text(after_arrival_message, "event.after_arrival_message")
 
     if isinstance(target, str):
         try:
@@ -289,6 +326,19 @@ def parse_event(
 
 def _load_event(data: dict[str, Any]) -> EventConfig:
     event = _table(data, "event")
+    _reject_unknown_keys(
+        event,
+        frozenset(
+            {
+                "label",
+                "target",
+                "timezone",
+                "confirmed",
+                "after_arrival_message",
+            }
+        ),
+        "[event]",
+    )
     if event.get("confirmed") is not True:
         raise ConfigError("event.confirmed must be true for the configured target")
     return parse_event(
@@ -306,6 +356,22 @@ def _load_profile(name: str, raw_monitors: object) -> DisplayLayout:
     for index, raw in enumerate(raw_monitors):
         if not isinstance(raw, dict):
             raise ConfigError(f"profile {name} monitor {index} must be a table")
+        _reject_unknown_keys(
+            raw,
+            frozenset(
+                {
+                    "connector",
+                    "x",
+                    "y",
+                    "scale",
+                    "transform",
+                    "primary",
+                    "physical_width",
+                    "physical_height",
+                }
+            ),
+            f"display profile {name} monitor {index}",
+        )
         connector = _string(raw, "connector")
         scale = _number(raw, "scale", minimum=0.1, maximum=16)
         transform = _integer(raw, "transform", minimum=0)
@@ -338,13 +404,16 @@ def _load_profile(name: str, raw_monitors: object) -> DisplayLayout:
 
 def _load_display(data: dict[str, Any]) -> DisplayConfig:
     display = _table(data, "display")
+    _reject_unknown_keys(
+        display,
+        frozenset({"mode", "fallback_profile", "profiles"}),
+        "[display]",
+    )
     mode = _string(display, "mode")
     if mode not in {"auto", "profile"}:
         raise ConfigError("display.mode must be 'auto' or 'profile'")
     fallback = display.get("fallback_profile")
-    if fallback is not None and (
-        not isinstance(fallback, str) or not fallback.strip()
-    ):
+    if fallback is not None and (not isinstance(fallback, str) or not fallback.strip()):
         raise ConfigError("display.fallback_profile must be a non-empty string")
     raw_profiles = display.get("profiles", {})
     if not isinstance(raw_profiles, dict):
@@ -353,6 +422,11 @@ def _load_display(data: dict[str, Any]) -> DisplayConfig:
     for name, profile in raw_profiles.items():
         if not isinstance(profile, dict):
             raise ConfigError(f"display profile {name} must be a table")
+        _reject_unknown_keys(
+            profile,
+            frozenset({"monitors"}),
+            f"display profile {name}",
+        )
         profiles[name] = _load_profile(name, profile.get("monitors"))
     if mode == "profile" and (not fallback or fallback not in profiles):
         raise ConfigError("profile mode requires a valid fallback_profile")
@@ -362,7 +436,13 @@ def _load_display(data: dict[str, Any]) -> DisplayConfig:
 
 
 def load_config(path: Path | None = None) -> AppConfig:
-    config_path = (path or default_config_path()).expanduser().resolve()
+    requested_path = (path or default_config_path()).expanduser()
+    try:
+        config_path = requested_path.resolve()
+    except OSError as error:
+        raise ConfigError(
+            f"could not resolve configuration file {requested_path}: {error}"
+        ) from error
     try:
         with config_path.open("rb") as handle:
             data = tomllib.load(handle)
@@ -372,28 +452,98 @@ def load_config(path: Path | None = None) -> AppConfig:
         ) from error
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"invalid TOML in {config_path}: {error}") from error
+    except OSError as error:
+        raise ConfigError(
+            f"could not read configuration file {config_path}: {error}"
+        ) from error
+
+    schema_version = data.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version != CONFIG_SCHEMA_VERSION
+    ):
+        raise ConfigError(
+            "configuration uses an unsupported schema; "
+            "run countscape init --force to replace the pre-release configuration"
+        )
+
+    _reject_unknown_keys(
+        data,
+        frozenset(
+            {
+                "schema_version",
+                "runtime",
+                "event",
+                "display",
+                "wallpaper",
+                "schedule",
+                "selection",
+                "style",
+            }
+        ),
+        "configuration root",
+    )
 
     wallpaper = _table(data, "wallpaper")
+    runtime = _table(data, "runtime")
     schedule = _table(data, "schedule")
     selection = _table(data, "selection")
     style = _table(data, "style")
+    _reject_unknown_keys(
+        wallpaper,
+        frozenset(
+            {
+                "source_directory",
+                "output_directory",
+                "cache_directory",
+                "max_canvas_pixels",
+            }
+        ),
+        "[wallpaper]",
+    )
+    _reject_unknown_keys(
+        runtime,
+        frozenset({"state_directory"}),
+        "[runtime]",
+    )
+    _reject_unknown_keys(
+        schedule,
+        frozenset({"countdown_refresh_seconds", "photo_rotation_seconds"}),
+        "[schedule]",
+    )
+    _reject_unknown_keys(selection, frozenset({"seed"}), "[selection]")
+    _reject_unknown_keys(
+        style,
+        frozenset(
+            {"font", "overlay_position", "margin_ratio", "font_ratio", "photo_fit"}
+        ),
+        "[style]",
+    )
     root = config_path.parent
     source_directory = _resolve(root, _string(wallpaper, "source_directory"))
     output_directory = _resolve(root, _string(wallpaper, "output_directory"))
     cache_directory = _resolve(root, _string(wallpaper, "cache_directory"))
-    validate_storage_paths(source_directory, output_directory, cache_directory)
+    state_directory = _resolve(root, _string(runtime, "state_directory"))
+    validate_storage_paths(
+        source_directory,
+        output_directory,
+        cache_directory,
+        state_directory,
+    )
     validate_config_location(
         config_path,
         source_directory,
         output_directory,
         cache_directory,
+        state_directory,
     )
 
     overlay_position = _string(style, "overlay_position")
     if overlay_position not in {"center", "bottom"}:
         raise ConfigError("style.overlay_position must be 'center' or 'bottom'")
-    photo_fit = style.get("photo_fit", "contain")
-    if not isinstance(photo_fit, str) or photo_fit not in {"contain", "cover"}:
+    photo_fit = _string(style, "photo_fit")
+    if photo_fit not in {"contain", "cover"}:
         raise ConfigError("style.photo_fit must be 'contain' or 'cover'")
     raw_font = style.get("font")
     if not isinstance(raw_font, str):
@@ -427,4 +577,5 @@ def load_config(path: Path | None = None) -> AppConfig:
             photo_fit=photo_fit,
         ),
         display=_load_display(data),
+        runtime=RuntimeConfig(state_directory=state_directory),
     )

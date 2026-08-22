@@ -52,11 +52,7 @@ def parse_current_state(payload: str) -> DisplayLayout:
             spec, modes, _monitor_properties = raw_monitor
             connector = spec[0]
             current = next(
-                (
-                    mode
-                    for mode in modes
-                    if _variant(mode[6], "is-current") is True
-                ),
+                (mode for mode in modes if _variant(mode[6], "is-current") is True),
                 None,
             )
             if current is not None:

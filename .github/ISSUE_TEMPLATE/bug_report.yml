@@ -1,0 +1,74 @@
+name: Bug report
+description: Report reproducible Countscape behavior on the supported GNOME platform.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem.
+
+        **Privacy warning:** This issue is public. Do not attach personal photos, private event details, unredacted logs, machine-local configuration, credentials, usernames, home paths, monitor identifiers, or screenshots containing personal information. Use synthetic examples and replace local values consistently.
+
+        For vulnerabilities, stop here and use the private security-reporting link shown on the issue chooser.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed personal data and replaced local values with synthetic examples.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Countscape version or commit
+      description: Use a release tag or commit ID; do not paste local paths.
+      placeholder: v0.1.0 or a1b2c3d
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Ubuntu, GNOME, Wayland, Python, and systemd versions. Replace identifying display details.
+      placeholder: Ubuntu 26.04; GNOME on Wayland; Python 3.14; systemd version …
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the observed result and the expected result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use synthetic targets, paths, labels, images, and display identifiers.
+      placeholder: |
+        1. Create a synthetic configuration …
+        2. Run `countscape …`
+        3. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Safe diagnostics
+      description: Run `countscape doctor --json` and paste its reviewed, safe-by-default output here. When integration is relevant, review `countscape status --json` locally and summarize it under additional context. Never paste or attach either command's `--include-private` output because it contains private diagnostics or raw runtime state.
+      placeholder: Paste the complete output from `countscape doctor --json` only.
+      render: json
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Optional context that contains no personal data. A reviewed summary of default-redacted `countscape status --json` may go here; never include `status --include-private` output.

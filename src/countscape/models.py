@@ -74,11 +74,7 @@ class DisplayLayout:
                 or abs(monitor.y) > 1_000_000
             ):
                 raise DisplayError("monitor coordinates must be finite and reasonable")
-            if (
-                not isfinite(monitor.scale)
-                or monitor.scale < 0.1
-                or monitor.scale > 16
-            ):
+            if not isfinite(monitor.scale) or monitor.scale < 0.1 or monitor.scale > 16:
                 raise DisplayError("monitor scale must be between 0.1 and 16")
             if (
                 type(monitor.transform) is not int

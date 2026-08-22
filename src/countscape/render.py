@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from countscape.config import AppConfig
 from countscape.countdown import CountdownState, calculate_countdown
 from countscape.display import build_canvas_layout
-from countscape.errors import CountdownError
+from countscape.errors import CountdownError, StateError
 from countscape.models import CanvasLayout, CanvasRegion, DisplayLayout
 from countscape.photos import (
     PhotoPool,
@@ -30,6 +30,7 @@ from countscape.state import (
     ensure_owned_directory,
     operation_lock,
     read_json,
+    read_json_strict,
 )
 
 FONT_COMMAND = (
@@ -41,8 +42,22 @@ FONT_COMMAND = (
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 GENERATED_WALLPAPER_NAME = re.compile(r"wallpaper-[0-9a-f]{24}\.png")
 GENERATED_CALIBRATION_NAME = re.compile(r"calibration-[0-9a-f]{24}\.png")
-_OUTPUT_RESERVED = frozenset({"render-state.json", "calibration.png"})
+RENDER_STATE_SCHEMA_VERSION = 1
+_OUTPUT_RESERVED = frozenset({"render-state.json"})
 _CACHE_RESERVED = frozenset({"base.png", "base.json"})
+_RENDER_STATE_KEYS = frozenset(
+    {
+        "application",
+        "schema_version",
+        "output",
+        "bucket",
+        "text_bucket",
+        "photo",
+        "layout_source",
+        "rendered_at",
+        "render_key",
+    }
+)
 
 
 def resolve_font(
@@ -176,19 +191,22 @@ def _draw_overlay(
     margin = round(short_edge * margin_ratio)
     available_width = region.width - 2 * margin
     available_height = region.height - 2 * margin
-    fitted: tuple[
-        ImageFont.FreeTypeFont,
-        ImageFont.FreeTypeFont,
-        str,
-        str,
-        tuple[int, int, int, int],
-        tuple[int, int, int, int],
-        int,
-        int,
-        int,
-        int,
-        int,
-    ] | None = None
+    fitted: (
+        tuple[
+            ImageFont.FreeTypeFont,
+            ImageFont.FreeTypeFont,
+            str,
+            str,
+            tuple[int, int, int, int],
+            tuple[int, int, int, int],
+            int,
+            int,
+            int,
+            int,
+            int,
+        ]
+        | None
+    ) = None
     initial_size = min(512, max(24, round(short_edge * font_ratio)))
     for main_size in range(initial_size, 9, -2):
         label_size = max(10, round(main_size * 0.42))
@@ -468,6 +486,24 @@ def _reusable_output(
     return output if output.is_file() else None
 
 
+def _read_render_state(path: Path) -> dict[str, Any]:
+    state = read_json_strict(path)
+    if state is None:
+        return {}
+    if (
+        set(state) != _RENDER_STATE_KEYS
+        or state.get("application") != "countscape"
+        or not isinstance(state.get("schema_version"), int)
+        or isinstance(state.get("schema_version"), bool)
+        or state.get("schema_version") != RENDER_STATE_SCHEMA_VERSION
+    ):
+        raise StateError(
+            "render state uses an unsupported schema; "
+            "remove the pre-release generated output before rendering"
+        )
+    return state
+
+
 def render_wallpaper(
     config: AppConfig,
     layout: DisplayLayout,
@@ -535,7 +571,7 @@ def render_wallpaper(
     lock = operation_lock(output_directory) if acquire_lock else nullcontext()
     with lock:
         state_path = output_directory / "render-state.json"
-        prior_state = read_json(state_path)
+        prior_state = _read_render_state(state_path)
         reusable = _reusable_output(output_directory, prior_state, render_key)
         if reusable is not None:
             return reusable
@@ -563,6 +599,8 @@ def render_wallpaper(
         atomic_write_json(
             state_path,
             {
+                "application": "countscape",
+                "schema_version": RENDER_STATE_SCHEMA_VERSION,
                 "output": output.name,
                 "bucket": photo_bucket_value,
                 "text_bucket": text_bucket,
@@ -665,4 +703,7 @@ def render_calibration(
 
 def render_metadata(config: AppConfig) -> dict[str, Any]:
     path = config.wallpaper.output_directory / "render-state.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+    state = _read_render_state(path)
+    if not state:
+        raise FileNotFoundError(path)
+    return state

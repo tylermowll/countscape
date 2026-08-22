@@ -1,0 +1,330 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out tagged commit and complete history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.5"
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Synchronize locked environment
+        run: uv sync --locked --all-groups
+
+      - name: Validate tag against package metadata
+        run: uv run python tools/release_check.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Audit worktree and complete reachable history
+        run: uv run python tools/privacy_check.py --history
+
+      - name: Check local Markdown links
+        run: uv run python tools/check_markdown_links.py
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test with branch coverage gate
+        run: >-
+          uv run pytest
+          --cov=countscape
+          --cov-branch
+          --cov-report=term-missing
+          --cov-config=.coveragerc
+
+      - name: Build wheel and source distribution once
+        run: uv build --no-sources --clear --out-dir dist
+
+      - name: Validate exact distribution set and write checksums
+        run: >-
+          uv run python tools/release_check.py
+          --tag "${GITHUB_REF_NAME}"
+          --artifacts dist/*.whl dist/*.tar.gz
+          --write-checksums release-assets/SHA256SUMS
+
+      - name: Generate required release-note preamble
+        run: |
+          set -euo pipefail
+          {
+            printf '# Countscape %s\n\n' "${GITHUB_REF_NAME}"
+            cat <<'EOF'
+          ## Support scope
+
+          Countscape targets Python 3.14 on Ubuntu 26.04 with GNOME on Wayland.
+          It uses the current user's GNOME settings and systemd user manager;
+          root is not required for Countscape itself.
+
+          ## Known limitations
+
+          - One private configuration represents one countdown and photo pool.
+          - X11, other desktop environments, other distributions, and other
+            operating systems are not supported release claims.
+          - Live GNOME compatibility is limited to the configurations explicitly
+            recorded as tested for this release.
+
+          ## Artifact SHA-256 digests
+
+          ```text
+          EOF
+            cat release-assets/SHA256SUMS
+            printf '```\n\n'
+          } > release-assets/RELEASE_NOTES.md
+
+      - name: Audit release artifacts
+        run: >-
+          uv run python tools/privacy_check.py
+          --history --artifacts dist/*.whl dist/*.tar.gz
+
+      - name: Smoke-test wheel and sdist outside checkout
+        env:
+          DIST_DIR: ${{ github.workspace }}/dist
+        run: |
+          set -euo pipefail
+          smoke_root="${RUNNER_TEMP}/countscape-release-smoke"
+          mkdir -p "${smoke_root}"
+          expected_version="$(uv run python tools/release_check.py --print-version)"
+          cd "${smoke_root}"
+          wheel=("${DIST_DIR}"/*.whl)
+          sdist=("${DIST_DIR}"/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          wheel_version="$(uv tool run --isolated --from "${wheel[0]}" countscape --version)"
+          test "${wheel_version}" = "countscape ${expected_version}"
+          uv tool run --isolated --from "${wheel[0]}" countscape --help
+          sdist_version="$(uv tool run --isolated --from "${sdist[0]}" countscape --version)"
+          test "${sdist_version}" = "countscape ${expected_version}"
+          uv tool run --isolated --from "${sdist[0]}" countscape --help
+
+      - name: Upload immutable release bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: countscape-release-${{ github.ref_name }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            release-assets/SHA256SUMS
+            release-assets/RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 30
+
+  provenance:
+    name: Attest release provenance
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    steps:
+      - name: Download exact release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: countscape-release-${{ github.ref_name }}
+          path: release-bundle
+
+      - name: Verify release bundle checksums
+        working-directory: release-bundle/dist
+        run: sha256sum --check ../release-assets/SHA256SUMS
+
+      - name: Generate GitHub build-provenance attestation
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: release-bundle/dist/*
+
+  github-draft:
+    name: Stage and verify GitHub draft
+    needs:
+      - build
+      - provenance
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Download exact release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: countscape-release-${{ github.ref_name }}
+          path: release-bundle
+
+      - name: Verify release bundle checksums
+        working-directory: release-bundle/dist
+        run: sha256sum --check ../release-assets/SHA256SUMS
+
+      - name: Create, attach, and verify draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          checksum=release-bundle/release-assets/SHA256SUMS
+          notes=release-bundle/release-assets/RELEASE_NOTES.md
+          test -f "${checksum}"
+          test -f "${notes}"
+
+          draft_state="${RUNNER_TEMP}/countscape-release-draft-state"
+          if gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft > "${draft_state}" 2>/dev/null; then
+            test "$(<"${draft_state}")" = true
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --draft \
+              --verify-tag \
+              --generate-notes \
+              --notes-file "${notes}" \
+              --title "Countscape ${GITHUB_REF_NAME}"
+          fi
+
+          gh release upload "${GITHUB_REF_NAME}" \
+            "${wheel[0]}" "${sdist[0]}" "${checksum}" \
+            --clobber
+
+          expected_assets="$(
+            printf '%s\n' "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
+              LC_ALL=C sort
+          )"
+          actual_assets="$(
+            gh release view "${GITHUB_REF_NAME}" --json assets \
+              --jq '.assets[].name' |
+              LC_ALL=C sort
+          )"
+          test "${actual_assets}" = "${expected_assets}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" = true
+          gh release view "${GITHUB_REF_NAME}" --json body --jq .body > "${RUNNER_TEMP}/countscape-release-body"
+          grep -F '## Support scope' "${RUNNER_TEMP}/countscape-release-body"
+          grep -F '## Known limitations' "${RUNNER_TEMP}/countscape-release-body"
+          grep -F '## Artifact SHA-256 digests' "${RUNNER_TEMP}/countscape-release-body"
+          while IFS= read -r digest; do
+            grep -F -- "${digest}" "${RUNNER_TEMP}/countscape-release-body"
+          done < "${checksum}"
+
+  publish:
+    name: Publish to PyPI
+    needs:
+      - github-draft
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/countscape
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download exact release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: countscape-release-${{ github.ref_name }}
+          path: release-bundle
+
+      - name: Verify release bundle checksums
+        working-directory: release-bundle/dist
+        run: sha256sum --check ../release-assets/SHA256SUMS
+
+      - name: Publish with Trusted Publishing and PEP 740 attestations
+        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: release-bundle/dist/
+          attestations: true
+          print-hash: true
+          verbose: true
+
+  github-release:
+    name: Publish verified GitHub Release
+    needs: publish
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Download exact release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: countscape-release-${{ github.ref_name }}
+          path: release-bundle
+
+      - name: Verify release bundle checksums
+        working-directory: release-bundle/dist
+        run: sha256sum --check ../release-assets/SHA256SUMS
+
+      - name: Download, reverify, and publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          checksum=release-bundle/release-assets/SHA256SUMS
+          test -f "${checksum}"
+
+          expected_assets="$(
+            printf '%s\n' "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
+              LC_ALL=C sort
+          )"
+          actual_assets="$(
+            gh release view "${GITHUB_REF_NAME}" --json assets \
+              --jq '.assets[].name' |
+              LC_ALL=C sort
+          )"
+          test "${actual_assets}" = "${expected_assets}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" = true
+
+          gh release view "${GITHUB_REF_NAME}" --json body --jq .body > "${RUNNER_TEMP}/countscape-release-body"
+          grep -F '## Support scope' "${RUNNER_TEMP}/countscape-release-body"
+          grep -F '## Known limitations' "${RUNNER_TEMP}/countscape-release-body"
+          grep -F '## Artifact SHA-256 digests' "${RUNNER_TEMP}/countscape-release-body"
+          while IFS= read -r digest; do
+            grep -F -- "${digest}" "${RUNNER_TEMP}/countscape-release-body"
+          done < "${checksum}"
+
+          mkdir "${RUNNER_TEMP}/countscape-draft-assets"
+          gh release download "${GITHUB_REF_NAME}" \
+            --dir "${RUNNER_TEMP}/countscape-draft-assets"
+          cmp \
+            "${checksum}" \
+            "${RUNNER_TEMP}/countscape-draft-assets/SHA256SUMS"
+          (
+            cd "${RUNNER_TEMP}/countscape-draft-assets"
+            sha256sum --check SHA256SUMS
+          )
+
+          gh release edit "${GITHUB_REF_NAME}" --draft=false --verify-tag

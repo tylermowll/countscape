@@ -1,5 +1,7 @@
 # Reference only. Run `countscape init` to generate a configuration with your
 # own confirmed target and XDG paths.
+schema_version = 1
+
 [event]
 label = "Until the big day"
 target = "2030-01-01T12:00:00+00:00"
@@ -9,6 +11,9 @@ after_arrival_message = "It's here!"
 
 [display]
 mode = "auto"
+
+[runtime]
+state_directory = "~/.local/state/countscape"
 
 [wallpaper]
 source_directory = "~/.local/share/countscape/backgrounds"

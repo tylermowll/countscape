@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "countscape"
 version = "0.1.0"
-description = "A customizable photo countdown wallpaper for Ubuntu GNOME"
+description = "An offline photo countdown wallpaper for Ubuntu GNOME/Wayland"
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
@@ -13,8 +13,12 @@ license-files = ["LICENSE"]
 keywords = [
     "countdown",
     "gnome",
+    "multi-monitor",
+    "offline",
+    "systemd",
     "ubuntu",
     "wallpaper",
+    "wayland",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -35,12 +39,16 @@ countscape = "countscape.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/tylermowll/countscape"
+Changelog = "https://github.com/tylermowll/countscape/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/tylermowll/countscape#readme"
 Issues = "https://github.com/tylermowll/countscape/issues"
 Repository = "https://github.com/tylermowll/countscape.git"
+Security = "https://github.com/tylermowll/countscape/security/policy"
 
 [dependency-groups]
 dev = [
     "pytest>=8.4,<10",
+    "pytest-cov>=7.1,<8",
     "ruff>=0.12,<1",
 ]
 
@@ -60,28 +68,4 @@ select = [
     "UP",
     "B",
     "SIM",
-]
-
-[tool.uv.build-backend]
-source-include = [
-    "uv.lock",
-    ".gitignore",
-    "AGENTS.md",
-    ".agents/spec/constitution.md",
-    ".github/workflows/ci.yml",
-    "CONTRIBUTING.md",
-    "SECURITY.md",
-    "config/countscape.example.toml",
-    "docs/architecture.md",
-    "tests/conftest.py",
-    "tests/fixtures/mutter-single-display.json",
-    "tests/test_cli.py",
-    "tests/test_config.py",
-    "tests/test_countdown.py",
-    "tests/test_display.py",
-    "tests/test_gnome.py",
-    "tests/test_install.py",
-    "tests/test_photos.py",
-    "tests/test_render.py",
-    "tools/privacy_check.py",
 ]

@@ -1,0 +1,8 @@
+# Keep the public maintenance boundary explicit. Repository rules should require
+# code-owner review while allowing the owner to bypass their own pull requests.
+* @tylermowll
+
+/.github/ @tylermowll
+/tools/ @tylermowll
+/pyproject.toml @tylermowll
+/uv.lock @tylermowll

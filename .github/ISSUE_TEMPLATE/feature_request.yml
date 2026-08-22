@@ -1,0 +1,62 @@
+name: Feature request
+description: Propose a focused improvement within Countscape's product boundary.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Privacy warning:** This issue is public. Describe the use case with synthetic events, labels, paths, photos, and display details. Do not attach personal media, private schedules, local configuration, credentials, or unredacted screenshots and logs.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I used only public or synthetic examples and removed machine-local details.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Explain the user need independently of a preferred implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior and its expected CLI or configuration surface.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Countdown and scheduling
+        - Photo selection
+        - Rendering and layout
+        - GNOME integration
+        - Installation and lifecycle
+        - Diagnostics and documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional workarounds or smaller alternatives.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope acknowledgement
+      options:
+        - label: I understand that support claims require automated contract coverage and live platform evidence.
+          required: true

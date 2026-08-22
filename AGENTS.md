@@ -73,11 +73,15 @@ explicitly confirmed.
 Run checks appropriate to the change, normally:
 
 ```bash
-uv sync --locked
-uv run python tools/privacy_check.py
-uv run pytest
+uv sync --locked --all-groups
+uv run python tools/privacy_check.py --history
+uv run python tools/check_markdown_links.py
+uv run ruff format --check .
 uv run ruff check .
-uv build
+uv run pytest --cov=countscape --cov-branch --cov-report=term-missing --cov-config=.coveragerc
+uv build --no-sources --clear --out-dir dist
+uv run python tools/release_check.py --artifacts dist/*.whl dist/*.tar.gz
+uv run python tools/privacy_check.py --history --artifacts dist/*.whl dist/*.tar.gz
 ```
 
 - Test before, at, and after the target and across daylight-saving changes.

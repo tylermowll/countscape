@@ -2,6 +2,10 @@
 
 This document describes the current Countscape implementation.
 
+For user-facing behavior, see [Installation](install.md),
+[Configuration](configuration.md), [Lifecycle](lifecycle.md), and the
+[security model](security-model.md).
+
 ## Product boundary
 
 Countscape is an offline photo countdown wallpaper for Ubuntu GNOME/Wayland.
@@ -9,15 +13,16 @@ The core owns configuration validation, countdown math, photo selection,
 display normalization, and rendering. Small adapters own Mutter discovery,
 GNOME settings, and systemd user integration.
 
-Version 0.1 does not aim to support other desktop environments, fetch or sync
+The v0.1 scope does not aim to support other desktop environments, fetch or sync
 photos, track events over the network, or provide a general text-template
 language.
 
 ## Components
 
-1. **Configuration** loads XDG-backed TOML and validates an aware event target,
-   its IANA timezone, nonoverlapping storage paths, display profiles,
-   independent schedules, a selection seed, and rendering style.
+1. **Configuration** loads versioned XDG-backed TOML and validates an aware event
+   target, its IANA timezone, a recorded runtime-state directory,
+   nonoverlapping storage paths, display profiles, independent schedules, a
+   selection seed, and rendering style.
 2. **Initialization and configuration** create private configuration, a stable
    random seed, and the selected photo directory; supported settings are
    rewritten atomically.
@@ -79,7 +84,8 @@ matching IANA timezone. It writes `event.confirmed = true`, generates a random
 machine-local selection seed, and creates the photo directory. Existing config
 is not overwritten without `--force`. A forced rewrite preserves the selection
 seed when the existing configuration can be loaded, keeping managed-directory
-ownership stable.
+ownership stable. Forced initialization refuses to replace config while managed
+integration is active; uninstall must complete first.
 
 Default paths honor absolute XDG base-directory overrides and otherwise use:
 
@@ -90,12 +96,19 @@ Default paths honor absolute XDG base-directory overrides and otherwise use:
 | Persistent final wallpapers | `~/.local/share/countscape/generated/` |
 | Rebuildable photo-only cache | `~/.cache/countscape/` |
 | Integration and GNOME state | `~/.local/state/countscape/` |
-| User units | `~/.config/systemd/user/` |
+| User-unit sources | `~/.local/state/countscape/systemd/` |
 
-The photo, output, and cache paths must be pairwise separate and nonoverlapping.
-Output and cache must be dedicated subdirectories rather than the filesystem
-root or home directory, and configuration cannot be placed inside the photo,
-output, or cache directory.
+`countscape init` records the resolved integration-state directory in
+`[runtime].state_directory`. Installed commands load that path from the recorded
+config, so the systemd user manager does not re-resolve lifecycle state from an
+ambient `XDG_STATE_HOME`. Unit sources live under the recorded state's `systemd/`
+child and are linked into the user manager. The v0.1 config requires
+`schema_version = 1`; pre-v0.1 preview config and state are intentionally not
+migrated.
+
+The photo, output, cache, runtime-state, and configuration directories must be
+pairwise separate and nonoverlapping. Output, cache, and state must be dedicated
+subdirectories rather than the filesystem root or home directory.
 Relative paths in a manually written configuration resolve from the
 configuration file's directory. Final wallpapers are persistent data, not
 cache, because GNOME may still reference one after cache cleanup.
@@ -233,7 +246,8 @@ user choices.
 ## Installation and removal safety
 
 Installation preflights configuration, photos, display layout, canvas size,
-font, and the running Python executable before writing user units. The service
+font, and the running Python executable before writing unit sources under the
+recorded runtime state and linking them into the user manager. The service
 invokes that executable with `-m countscape`; neither a repository path nor a
 checkout-local virtual environment is embedded.
 

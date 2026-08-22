@@ -119,7 +119,7 @@ def test_managed_uri_history_is_bounded_and_still_restores_recent_uri(
     }
 
 
-def test_true_no_op_compacts_oversized_legacy_history(tmp_path: Path) -> None:
+def test_true_no_op_compacts_oversized_managed_history(tmp_path: Path) -> None:
     fake = FakeGSettings()
     state = tmp_path / "state"
     wallpaper = tmp_path / "wallpaper.png"
@@ -128,7 +128,7 @@ def test_true_no_op_compacts_oversized_legacy_history(tmp_path: Path) -> None:
     state_path = state / "gnome-background.json"
     saved = read_json(state_path)
     saved["managed_uris"] = [
-        f"file:///legacy-wallpaper-{index}.png" for index in range(5000)
+        f"file:///old-wallpaper-{index}.png" for index in range(5000)
     ]
     state_path.write_text(json.dumps(saved), encoding="utf-8")
     fake.commands.clear()
@@ -256,12 +256,30 @@ def test_pending_apply_transaction_can_be_safely_restored(tmp_path: Path) -> Non
         (
             json.dumps(
                 {
+                    "application": "countscape",
+                    "schema_version": 1,
                     "original": None,
                     "managed_uris": [],
                     "pending": {"desired": {}, "prior": {}},
                 }
             ),
             "invalid transaction",
+        ),
+        (
+            json.dumps(
+                {
+                    "application": "countscape",
+                    "schema_version": 1,
+                    "original": {
+                        "picture-uri": "file:///original-light.png",
+                        "picture-uri-dark": "file:///original-dark.png",
+                        "picture-options": "zoom",
+                        "preview_field": "unsupported",
+                    },
+                    "managed_uris": ["file:///managed.png"],
+                }
+            ),
+            "invalid original",
         ),
     ),
 )
@@ -291,6 +309,36 @@ def test_corrupt_gnome_state_is_never_silently_replaced(
 
     assert state_path.read_text(encoding="utf-8") == contents
     assert fake.values == before_settings
+    assert not any(command[1] == "set" for command in fake.commands)
+
+
+def test_pre_release_gnome_state_schema_is_rejected(tmp_path: Path) -> None:
+    fake = FakeGSettings()
+    state = tmp_path / "state"
+    state.mkdir()
+    state_path = state / "gnome-background.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "original": None,
+                "managed_uris": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    wallpaper = tmp_path / "wallpaper.png"
+    wallpaper.touch()
+
+    with pytest.raises(IntegrationError, match="unsupported schema"):
+        apply_wallpaper(
+            wallpaper,
+            multi_monitor=False,
+            state_directory=state,
+            runner=fake,
+        )
+
+    assert json.loads(state_path.read_text(encoding="utf-8"))["version"] == 1
     assert not any(command[1] == "set" for command in fake.commands)
 
 

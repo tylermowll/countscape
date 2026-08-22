@@ -1,3 +1,8 @@
 """Countscape photo countdown wallpaper."""
 
-__version__ = "0.1.0"
+from importlib.metadata import version
+
+
+def installed_version() -> str:
+    """Return the version from the installed distribution metadata."""
+    return version("countscape")

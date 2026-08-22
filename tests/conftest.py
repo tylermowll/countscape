@@ -26,6 +26,7 @@ def write_config(
     mode: str = "profile",
     output: str | Path | None = None,
     cache: str | Path | None = None,
+    state: str | Path | None = None,
     source: str | Path | None = None,
     label: str = "Until the lantern festival",
     target: str = "2027-06-01T12:00:00-04:00",
@@ -44,8 +45,14 @@ def write_config(
     source_path = source if source is not None else root / "photos"
     output_path = output if output is not None else root / "data" / "generated"
     cache_path = cache if cache is not None else root / "cache"
+    state_path = state if state is not None else root / "state"
     path.write_text(
         f"""
+schema_version = 1
+
+[runtime]
+state_directory = {json.dumps(str(state_path))}
+
 [event]
 label = {json.dumps(label)}
 target = {json.dumps(target)}
