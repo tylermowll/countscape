@@ -37,6 +37,16 @@ uv run pytest \
   --cov-config=.coveragerc
 ```
 
+Enable the tracked repository-native pre-commit hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs staged-diff validation, the privacy and documentation checks,
+Ruff, and the complete branch-coverage test gate. CI repeats the same checks;
+do not bypass either gate to merge a change.
+
 Use `uv` for every Python environment, dependency, command, lock, build, and
 test. Do not use bare `pip`, Poetry, or Conda. If dependencies change, update
 `pyproject.toml` and `uv.lock` in the same pull request.

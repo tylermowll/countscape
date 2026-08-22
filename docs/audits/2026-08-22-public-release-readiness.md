@@ -27,6 +27,8 @@ Public documentation, community standards, issue forms, pull-request guidance,
 CI, CodeQL, dependency updates, artifact checks, provenance, trusted-publishing
 workflow, and immutable-release staging are present. The README hero is a
 synthetic illustration with stripped metadata and a pinned reviewed digest.
+The reviewed Wiki publication source is tracked under `wiki/`, and a
+repository-native pre-commit hook is tracked under `.githooks/`.
 
 ## Adversarial findings and disposition
 
@@ -110,9 +112,10 @@ Do not describe any of these as complete:
    non-fast-forward changes except for the explicit maintainer bypass.
 2. **GitHub Wiki publication.** GitHub has not initialized the Wiki Git
    repository. Create the first page in the GitHub UI, then publish the reviewed
-   six-page copy: Home, Privacy, FAQ, Display Recipes, Tested GNOME
-   Configurations, and Community Troubleshooting. Canonical repository docs must
-   remain authoritative, and editing must remain collaborator-only.
+   six-page source tracked under `wiki/`: Home, Privacy, FAQ, Display Recipes,
+   Tested GNOME Configurations, and Community Troubleshooting. Canonical
+   repository docs must remain authoritative, and editing must remain
+   collaborator-only.
 3. **PyPI trust registration.** The `countscape` project is not published. In
    PyPI, register the pending trusted publisher for owner `tylermowll`, repository
    `countscape`, workflow `release.yml`, and environment `pypi` before pushing a
@@ -125,15 +128,15 @@ Do not describe any of these as complete:
    upload remains a GitHub UI action.
 6. **Release.** No `v0.1.0` tag, GitHub release, or PyPI distribution exists.
 
-The Wiki publication copy is intentionally excluded from the main repository;
-do not solve that by committing duplicate Wiki pages here. Rebuild its six
-community pages from the canonical docs named above if the original local
-staging copy is unavailable.
+The tracked `wiki/` directory is the reviewable publication source, not a second
+canonical product manual. Remove it only if an equally reviewable automated Wiki
+publication source replaces it.
 
 ## Resume order on another computer
 
-1. Clone `main`, run `uv sync --locked --all-groups`, and rerun the full
-   `AGENTS.md` gate sequence.
+1. Clone `main`, run `uv sync --locked --all-groups`, enable the tracked hook
+   with `git config core.hooksPath .githooks`, and rerun the full `AGENTS.md`
+   gate sequence.
 2. Inspect the pushed CI and CodeQL runs; fix any host-only discrepancy before
    enabling required checks.
 3. Apply the `main` and `v*` rulesets described above.
