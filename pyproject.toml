@@ -1,0 +1,88 @@
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[project]
+name = "countscape"
+version = "0.1.0"
+description = "A customizable photo countdown wallpaper for Ubuntu GNOME"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+    "countdown",
+    "gnome",
+    "ubuntu",
+    "wallpaper",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Desktop Environment :: Gnome",
+]
+dependencies = ["pillow>=11.3,<13"]
+
+[[project.authors]]
+name = "Countscape contributors"
+
+[project.scripts]
+countscape = "countscape.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/tylermowll/countscape"
+Issues = "https://github.com/tylermowll/countscape/issues"
+Repository = "https://github.com/tylermowll/countscape.git"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<10",
+    "ruff>=0.12,<1",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+]
+
+[tool.uv.build-backend]
+source-include = [
+    "uv.lock",
+    ".gitignore",
+    "AGENTS.md",
+    ".agents/spec/constitution.md",
+    ".github/workflows/ci.yml",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "config/countscape.example.toml",
+    "docs/architecture.md",
+    "docs/implementation-plan.md",
+    "tests/conftest.py",
+    "tests/fixtures/mutter-single-display.json",
+    "tests/test_cli.py",
+    "tests/test_config.py",
+    "tests/test_countdown.py",
+    "tests/test_display.py",
+    "tests/test_gnome.py",
+    "tests/test_install.py",
+    "tests/test_photos.py",
+    "tests/test_render.py",
+    "tools/privacy_check.py",
+]

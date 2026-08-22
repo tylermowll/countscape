@@ -1,0 +1,40 @@
+# === OS files ===
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# === Editors ===
+.idea/
+.vscode/
+*.code-workspace
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# === Environments and local settings ===
+.env
+.env.*
+!.env.example
+*.local.toml
+/countscape.toml
+/config/countscape.toml
+.venv/
+env/
+venv/
+
+# === Runtime output ===
+*.log
+/var/
+
+# === User-supplied photos ===
+assets/backgrounds/*
+!assets/backgrounds/.gitkeep

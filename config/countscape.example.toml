@@ -1,0 +1,33 @@
+# Reference only. Run `countscape init` to generate a configuration with your
+# own confirmed target and XDG paths.
+[event]
+label = "Until the big day"
+target = "2030-01-01T12:00:00+00:00"
+timezone = "Etc/UTC"
+confirmed = false
+after_arrival_message = "It's here!"
+
+[display]
+mode = "auto"
+
+[wallpaper]
+source_directory = "~/.local/share/countscape/backgrounds"
+output_directory = "~/.local/share/countscape/generated"
+cache_directory = "~/.cache/countscape"
+max_canvas_pixels = 100000000
+
+[schedule]
+countdown_refresh_seconds = 60
+photo_rotation_seconds = 600
+
+[selection]
+seed = "replace-with-a-private-random-value"
+
+[style]
+# Leave empty to resolve a bold system font through fontconfig.
+font = ""
+overlay_position = "bottom"
+margin_ratio = 0.05
+font_ratio = 0.055
+# `contain` shows the entire photo; `cover` fills the display and crops edges.
+photo_fit = "contain"
