@@ -43,7 +43,7 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 GENERATED_WALLPAPER_NAME = re.compile(r"wallpaper-[0-9a-f]{24}\.png")
 GENERATED_CALIBRATION_NAME = re.compile(r"calibration-[0-9a-f]{24}\.png")
 RENDER_STATE_SCHEMA_VERSION = 1
-_OUTPUT_RESERVED = frozenset({"render-state.json"})
+_OUTPUT_RESERVED = frozenset({".countscape.lock", "render-state.json"})
 _CACHE_RESERVED = frozenset({"base.png", "base.json"})
 _RENDER_STATE_KEYS = frozenset(
     {

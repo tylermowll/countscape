@@ -20,6 +20,7 @@ HTML_ANCHOR = re.compile(
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 LINE_FRAGMENT = re.compile(r"L(?P<start>\d+)(?:-L(?P<end>\d+))?", re.IGNORECASE)
 INLINE_CODE = re.compile(r"`+[^`]*`+")
+WIKI_LINK = re.compile(r"\[\[([^\]]+)\]\]")
 
 
 def markdown_paths() -> tuple[Path, ...]:
@@ -40,13 +41,14 @@ def markdown_paths() -> tuple[Path, ...]:
     )
     if result.returncode != 0:
         raise RuntimeError("Markdown files could not be enumerated")
-    return tuple(
-        sorted(
-            ROOT / raw.decode("utf-8", errors="surrogateescape")
-            for raw in result.stdout.split(b"\0")
-            if raw
-        )
+    candidates = (
+        ROOT / raw.decode("utf-8", errors="surrogateescape")
+        for raw in result.stdout.split(b"\0")
+        if raw
     )
+    # A staged deletion remains in `git ls-files --cached` even though there is
+    # no Markdown document left to validate.
+    return tuple(sorted(path for path in candidates if path.is_file()))
 
 
 def _slug(text: str) -> str:
@@ -125,6 +127,35 @@ def _targets(path: Path) -> tuple[tuple[int, str], ...]:
     return tuple(targets)
 
 
+def _wiki_targets(path: Path) -> tuple[tuple[int, str, str], ...]:
+    if path.parent != ROOT / "wiki":
+        return ()
+    targets: list[tuple[int, str, str]] = []
+    fenced = False
+    fence_marker = ""
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        stripped = line.lstrip()
+        if stripped.startswith(("```", "~~~")):
+            marker = stripped[:3]
+            if not fenced:
+                fenced = True
+                fence_marker = marker
+            elif marker == fence_marker:
+                fenced = False
+            continue
+        if fenced:
+            continue
+        searchable = INLINE_CODE.sub("", line)
+        for match in WIKI_LINK.finditer(searchable):
+            raw_target = match.group(1).rsplit("|", 1)[-1].strip()
+            page, separator, fragment = raw_target.partition("#")
+            if page:
+                targets.append((line_number, page, fragment if separator else ""))
+    return tuple(targets)
+
+
 def _local_target(source: Path, raw_target: str) -> tuple[Path, str] | None:
     if not raw_target or "${{" in raw_target or raw_target.startswith("//"):
         return None
@@ -176,6 +207,21 @@ def check_links() -> tuple[list[str], int]:
             if not _valid_fragment(target, fragment):
                 violations.append(
                     f"{relative}:{line_number}: local link anchor is missing"
+                )
+        for line_number, page, fragment in _wiki_targets(source):
+            filename = f"{page.replace(' ', '-')}.md"
+            target = (ROOT / "wiki" / filename).resolve()
+            if not target.is_relative_to(ROOT / "wiki"):
+                violations.append(f"{relative}:{line_number}: wiki link escapes wiki")
+                continue
+            if target.is_symlink() or not target.is_file():
+                violations.append(
+                    f"{relative}:{line_number}: wiki page target is missing"
+                )
+                continue
+            if not _valid_fragment(target, fragment):
+                violations.append(
+                    f"{relative}:{line_number}: wiki page anchor is missing"
                 )
     return sorted(set(violations)), len(paths)
 

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repository_root="$(git rev-parse --show-toplevel)"
+cd "${repository_root}"
+
+# The commit now exists, so this gate also inspects author/committer metadata
+# and the final commit message before any object leaves the machine.
+uv run python tools/privacy_check.py --history

@@ -622,6 +622,34 @@ def test_first_install_manifest_failure_rolls_back_unit_sources(
         )
 
     assert not (state / "install.json").exists()
+
+
+def test_first_install_refuses_preexisting_output_lock_sentinel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _xdg_config, xdg_state = _set_xdg_roots(tmp_path, monkeypatch)
+    make_image(tmp_path / "photos" / "photo.jpg")
+    state = xdg_state / "countscape"
+    config_path = write_config(tmp_path, state=state)
+    output = tmp_path / "data" / "generated"
+    output.mkdir(parents=True)
+    sentinel = output / ".countscape.lock"
+    sentinel.write_text("user lock sentinel\n", encoding="utf-8")
+
+    with pytest.raises(StateError, match="unowned.*reserved files"):
+        install(
+            config_path=config_path,
+            start=False,
+            runner=FakeSystemctl(),
+            _environment=_package_environment(
+                _make_executable(tmp_path / "tool" / "bin" / "python")
+            ),
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "user lock sentinel\n"
+    assert not (output / OWNERSHIP_MARKER).exists()
+    assert not (state / "install.json").exists()
     assert not (state / "systemd" / SERVICE_NAME).exists()
     assert not (state / "systemd" / TIMER_NAME).exists()
 

@@ -33,6 +33,10 @@ NONPERSONAL_EMAIL_DOMAINS = {
     "noreply.github.com",
     "users.noreply.github.com",
 }
+NONPERSONAL_EMAIL_ADDRESSES = {
+    "noreply@github.com",
+    "support@github.com",
+}
 LEGACY_NAME = re.compile("desktop" + r"[-_ ]countdown", re.IGNORECASE)
 SECRET_PATTERNS = (
     re.compile("BEGIN " + r"[A-Z ]*PRIVATE KEY"),
@@ -89,14 +93,18 @@ FORBIDDEN_SUFFIXES = (
     ".zip",
 )
 
-# This is the one reviewed public-media exception. The exact-byte guard also
-# fixes its size, dimensions, encoding, and stripped metadata; changing the
+# These are the reviewed public-media exceptions. The exact-byte guards also
+# fix their sizes, dimensions, encodings, and stripped metadata; changing either
 # illustration requires an explicit review and digest update.
 APPROVED_MEDIA = {
     "docs/assets/countscape-hero.webp": {
         "sha256": "99fd4ca74c6ff6a18c2fb2be4e6dbe1d8250f577550f94a975717a8326e1392b",
         "size": 60_602,
-    }
+    },
+    "docs/assets/countscape-social-preview.png": {
+        "sha256": "7b7174c232a778a43483ed6e34a183c348dc7ec7b33510d23fe0356bf199bf40",
+        "size": 911_564,
+    },
 }
 
 
@@ -127,7 +135,8 @@ def _text_findings(text: str) -> tuple[str, ...]:
     if PRIVATE_PATH.search(text):
         findings.append("absolute user-home path")
     if any(
-        match.group(0).rsplit("@", 1)[1].lower() not in NONPERSONAL_EMAIL_DOMAINS
+        match.group(0).lower() not in NONPERSONAL_EMAIL_ADDRESSES
+        and match.group(0).rsplit("@", 1)[1].lower() not in NONPERSONAL_EMAIL_DOMAINS
         for match in EMAIL_ADDRESS.finditer(text)
     ):
         findings.append("personal email address")
@@ -145,15 +154,8 @@ def _approved_media(repository_path: str, data: bytes) -> bool:
     return hashlib.sha256(data).hexdigest() == expected["sha256"]
 
 
-def _scan_repository_entry(path: Path) -> list[str]:
-    relative = path.relative_to(ROOT)
-    label = relative.as_posix()
-    if path.is_symlink():
-        return [f"{label}: symbolic links are not allowed"]
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return [f"{label}: file could not be inspected"]
+def _scan_repository_bytes(repository_path: str, data: bytes) -> list[str]:
+    label = repository_path
     if len(data) > MAX_ENTRY_BYTES:
         return [f"{label}: file exceeds the privacy-audit size limit"]
 
@@ -168,11 +170,63 @@ def _scan_repository_entry(path: Path) -> list[str]:
     return [f"{label}: {finding}" for finding in _text_findings(text)]
 
 
+def _scan_repository_entry(path: Path) -> list[str]:
+    label = path.relative_to(ROOT).as_posix()
+    if path.is_symlink():
+        return [f"{label}: symbolic links are not allowed"]
+    if not path.exists():
+        # Git continues to enumerate a tracked path after its deletion is
+        # staged. The index scanner separately inspects every surviving staged
+        # blob, so an absent worktree entry has no bytes left to inspect.
+        return []
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return [f"{label}: file could not be inspected"]
+    return _scan_repository_bytes(label, data)
+
+
 def scan() -> list[str]:
     """Scan tracked and non-ignored worktree files."""
     violations: list[str] = []
     for path in candidate_paths():
         violations.extend(_scan_repository_entry(path))
+    return violations
+
+
+def scan_staged() -> list[str]:
+    """Scan the exact regular-file blobs staged in the Git index."""
+    violations: list[str] = []
+    output = _run_git(["ls-files", "--cached", "--stage", "-z"])
+    for record in output.split(b"\0"):
+        if not record:
+            continue
+        try:
+            metadata, raw_path = record.split(b"\t", 1)
+            mode, object_id, raw_stage = metadata.split(b" ", 2)
+            repository_path = raw_path.decode("utf-8", errors="surrogateescape")
+            stage = int(raw_stage)
+        except ValueError, UnicodeDecodeError:
+            violations.append("Git index contains an uninspectable entry")
+            continue
+        if stage != 0:
+            violations.append(f"{repository_path}: unresolved staged entry")
+            continue
+        if mode == b"120000":
+            violations.append(f"{repository_path}: symbolic links are not allowed")
+            continue
+        if mode == b"160000":
+            violations.append(f"{repository_path}: Git submodules are not allowed")
+            continue
+        if mode not in {b"100644", b"100755"} or not object_id.strip(b"0"):
+            violations.append(f"{repository_path}: unsupported staged entry")
+            continue
+        try:
+            data = _run_git(["cat-file", "blob", object_id.decode("ascii")])
+        except RuntimeError, UnicodeDecodeError:
+            violations.append(f"{repository_path}: staged blob could not be inspected")
+            continue
+        violations.extend(_scan_repository_bytes(repository_path, data))
     return violations
 
 
@@ -433,6 +487,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="also scan every Git object reachable from every local ref",
     )
     parser.add_argument(
+        "--staged",
+        action="store_true",
+        help="also scan the exact regular-file blobs staged in the Git index",
+    )
+    parser.add_argument(
         "--artifacts",
         nargs="+",
         type=Path,
@@ -446,6 +505,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         violations = scan()
+        if args.staged:
+            violations.extend(scan_staged())
         if args.history:
             violations.extend(scan_history())
         if args.artifacts:
@@ -459,6 +520,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- {violation}")
         return 1
     scopes = ["worktree"]
+    if args.staged:
+        scopes.append("staged index")
     if args.history:
         scopes.append("reachable Git history")
     if args.artifacts:

@@ -20,13 +20,13 @@ jobs:
 
     steps:
       - name: Check out tagged commit and complete history
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install pinned uv and Python
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
           python-version: "3.14"
@@ -39,8 +39,20 @@ jobs:
       - name: Validate tag against package metadata
         run: uv run python tools/release_check.py --tag "${GITHUB_REF_NAME}"
 
+      - name: Prove tag ancestry and immutable target
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "+refs/heads/main:refs/remotes/origin/main"
+          git merge-base --is-ancestor \
+            "${GITHUB_SHA}" refs/remotes/origin/main
+          git fetch --force --no-tags origin \
+            "refs/tags/${GITHUB_REF_NAME}:refs/countscape/remote-release-tag"
+          test "$(git rev-parse 'refs/countscape/remote-release-tag^{commit}')" \
+            = "${GITHUB_SHA}"
+
       - name: Audit worktree and complete reachable history
-        run: uv run python tools/privacy_check.py --history
+        run: uv run python tools/privacy_check.py --history --staged
 
       - name: Check local Markdown links
         run: uv run python tools/check_markdown_links.py
@@ -68,34 +80,7 @@ jobs:
           --tag "${GITHUB_REF_NAME}"
           --artifacts dist/*.whl dist/*.tar.gz
           --write-checksums release-assets/SHA256SUMS
-
-      - name: Generate required release-note preamble
-        run: |
-          set -euo pipefail
-          {
-            printf '# Countscape %s\n\n' "${GITHUB_REF_NAME}"
-            cat <<'EOF'
-          ## Support scope
-
-          Countscape targets Python 3.14 on Ubuntu 26.04 with GNOME on Wayland.
-          It uses the current user's GNOME settings and systemd user manager;
-          root is not required for Countscape itself.
-
-          ## Known limitations
-
-          - One private configuration represents one countdown and photo pool.
-          - X11, other desktop environments, other distributions, and other
-            operating systems are not supported release claims.
-          - Live GNOME compatibility is limited to the configurations explicitly
-            recorded as tested for this release.
-
-          ## Artifact SHA-256 digests
-
-          ```text
-          EOF
-            cat release-assets/SHA256SUMS
-            printf '```\n\n'
-          } > release-assets/RELEASE_NOTES.md
+          --write-release-notes release-assets/RELEASE_NOTES.md
 
       - name: Audit release artifacts
         run: >-
@@ -137,7 +122,7 @@ jobs:
   provenance:
     name: Attest release provenance
     needs: build
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       actions: read
@@ -158,16 +143,16 @@ jobs:
         run: sha256sum --check ../release-assets/SHA256SUMS
 
       - name: Generate GitHub build-provenance attestation
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: release-bundle/dist/*
 
   github-draft:
-    name: Stage and verify GitHub draft
+    name: Stage or recover GitHub release
     needs:
       - build
       - provenance
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       actions: read
@@ -184,9 +169,10 @@ jobs:
         working-directory: release-bundle/dist
         run: sha256sum --check ../release-assets/SHA256SUMS
 
-      - name: Create, attach, and verify draft
+      - name: Stage or recover and verify release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           wheel=(release-bundle/dist/*.whl)
@@ -195,24 +181,60 @@ jobs:
           test "${#sdist[@]}" -eq 1
           checksum=release-bundle/release-assets/SHA256SUMS
           notes=release-bundle/release-assets/RELEASE_NOTES.md
+          release_title="Countscape ${GITHUB_REF_NAME}"
           test -f "${checksum}"
           test -f "${notes}"
 
-          draft_state="${RUNNER_TEMP}/countscape-release-draft-state"
-          if gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft > "${draft_state}" 2>/dev/null; then
-            test "$(<"${draft_state}")" = true
+          release_state=""
+          if release_state="$(
+            gh release view "${GITHUB_REF_NAME}" \
+              --json isDraft,isImmutable \
+              --jq '[.isDraft, .isImmutable] | @tsv' 2>/dev/null
+          )"; then
+            for attempt in {1..12}; do
+              case "${release_state}" in
+                $'true\tfalse' | $'false\ttrue')
+                  break
+                  ;;
+              esac
+              if test "${attempt}" -lt 12; then
+                sleep 5
+                release_state="$(
+                  gh release view "${GITHUB_REF_NAME}" \
+                    --json isDraft,isImmutable \
+                    --jq '[.isDraft, .isImmutable] | @tsv'
+                )"
+              fi
+            done
           else
             gh release create "${GITHUB_REF_NAME}" \
               --draft \
               --verify-tag \
-              --generate-notes \
               --notes-file "${notes}" \
-              --title "Countscape ${GITHUB_REF_NAME}"
+              --title "${release_title}"
+            release_state=$'true\tfalse'
           fi
 
-          gh release upload "${GITHUB_REF_NAME}" \
-            "${wheel[0]}" "${sdist[0]}" "${checksum}" \
-            --clobber
+          case "${release_state}" in
+            $'true\tfalse')
+              gh release edit "${GITHUB_REF_NAME}" \
+                --draft=true \
+                --prerelease=false \
+                --verify-tag \
+                --notes-file "${notes}" \
+                --title "${release_title}"
+              gh release upload "${GITHUB_REF_NAME}" \
+                "${wheel[0]}" "${sdist[0]}" "${checksum}" \
+                --clobber
+              ;;
+            $'false\ttrue')
+              echo "GitHub release is already published and immutable; recovering."
+              ;;
+            *)
+              echo "GitHub release is neither a mutable draft nor immutable." >&2
+              exit 1
+              ;;
+          esac
 
           expected_assets="$(
             printf '%s\n' "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
@@ -224,25 +246,37 @@ jobs:
               LC_ALL=C sort
           )"
           test "${actual_assets}" = "${expected_assets}"
-          test "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" = true
-          gh release view "${GITHUB_REF_NAME}" --json body --jq .body > "${RUNNER_TEMP}/countscape-release-body"
-          grep -F '## Support scope' "${RUNNER_TEMP}/countscape-release-body"
-          grep -F '## Known limitations' "${RUNNER_TEMP}/countscape-release-body"
-          grep -F '## Artifact SHA-256 digests' "${RUNNER_TEMP}/countscape-release-body"
-          while IFS= read -r digest; do
-            grep -F -- "${digest}" "${RUNNER_TEMP}/countscape-release-body"
-          done < "${checksum}"
+          test "$(
+            gh release view "${GITHUB_REF_NAME}" \
+              --json isDraft,isImmutable \
+              --jq '[.isDraft, .isImmutable] | @tsv'
+          )" = "${release_state}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json isPrerelease --jq .isPrerelease)" = false
+          test "$(gh release view "${GITHUB_REF_NAME}" --json name --jq .name)" = "${release_title}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json tagName --jq .tagName)" = "${GITHUB_REF_NAME}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" = "$(<"${notes}")"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq .sha)" = "${GITHUB_SHA}"
+
+          asset_directory="${RUNNER_TEMP}/countscape-staged-assets"
+          mkdir "${asset_directory}"
+          gh release download "${GITHUB_REF_NAME}" --dir "${asset_directory}"
+          cmp "${checksum}" "${asset_directory}/SHA256SUMS"
+          (
+            cd "${asset_directory}"
+            sha256sum --check SHA256SUMS
+          )
 
   publish:
     name: Publish to PyPI
     needs:
       - github-draft
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
       name: pypi
       url: https://pypi.org/p/countscape
     permissions:
+      contents: read
       id-token: write
 
     steps:
@@ -256,18 +290,182 @@ jobs:
         working-directory: release-bundle/dist
         run: sha256sum --check ../release-assets/SHA256SUMS
 
+      - name: Reverify exact GitHub release and tag
+        id: github_release_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          checksum=release-bundle/release-assets/SHA256SUMS
+          notes=release-bundle/release-assets/RELEASE_NOTES.md
+          release_title="Countscape ${GITHUB_REF_NAME}"
+          expected_assets="$(
+            printf '%s\n' "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
+              LC_ALL=C sort
+          )"
+          release_state="$(
+            gh release view "${GITHUB_REF_NAME}" \
+              --json isDraft,isImmutable \
+              --jq '[.isDraft, .isImmutable] | @tsv'
+          )"
+          case "${release_state}" in
+            $'true\tfalse')
+              printf 'immutable=false\n' >> "${GITHUB_OUTPUT}"
+              ;;
+            $'false\ttrue')
+              printf 'immutable=true\n' >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "GitHub release is neither a mutable draft nor immutable." >&2
+              exit 1
+              ;;
+          esac
+          actual_assets="$(
+            gh release view "${GITHUB_REF_NAME}" --json assets \
+              --jq '.assets[].name' |
+              LC_ALL=C sort
+          )"
+          test "${actual_assets}" = "${expected_assets}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json isPrerelease --jq .isPrerelease)" = false
+          test "$(gh release view "${GITHUB_REF_NAME}" --json name --jq .name)" = "${release_title}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json tagName --jq .tagName)" = "${GITHUB_REF_NAME}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" = "$(<"${notes}")"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq .sha)" = "${GITHUB_SHA}"
+
+      - name: Detect an exact prior PyPI publication
+        id: pypi_state
+        env:
+          GITHUB_RELEASE_IMMUTABLE: ${{ steps.github_release_state.outputs.immutable }}
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          version="${GITHUB_REF_NAME#v}"
+          metadata="${RUNNER_TEMP}/countscape-pypi-release.json"
+          expected_records="$(
+            for artifact in "${wheel[0]}" "${sdist[0]}"; do
+              digest="$(sha256sum "${artifact}" | cut -d ' ' -f 1)"
+              printf '%s\t%s\n' "${digest}" "${artifact##*/}"
+            done | LC_ALL=C sort
+          )"
+          status="$(
+            curl --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' \
+              --connect-timeout 10 --max-time 30 \
+              --max-filesize 1048576 \
+              --retry 4 --retry-delay 2 --retry-max-time 90 \
+              --header 'Accept: application/json' \
+              --header 'Cache-Control: no-cache' \
+              --output "${metadata}" --write-out '%{http_code}' \
+              "https://pypi.org/pypi/countscape/${version}/json"
+          )"
+          case "${status}" in
+            200)
+              jq -e --arg version "${version}" '
+                (.info.version == $version)
+                and ((.urls | type) == "array")
+                and all(.urls[];
+                  (.filename | type) == "string"
+                  and (.digests.sha256 | type) == "string"
+                  and .yanked == false
+                )
+              ' "${metadata}" > /dev/null
+              actual_records="$(
+                jq -r '.urls[] | [.digests.sha256, .filename] | @tsv' \
+                  "${metadata}" | LC_ALL=C sort
+              )"
+              if test "${actual_records}" != "${expected_records}"; then
+                echo "PyPI already has different files for ${version}." >&2
+                exit 1
+              fi
+              echo "PyPI already has the exact unyanked release; recovering."
+              printf 'already_published=true\n' >> "${GITHUB_OUTPUT}"
+              ;;
+            404)
+              if test "${GITHUB_RELEASE_IMMUTABLE}" = true; then
+                echo "Immutable GitHub release has no matching PyPI release." >&2
+                exit 1
+              fi
+              printf 'already_published=false\n' >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "PyPI release lookup returned HTTP ${status}." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Publish with Trusted Publishing and PEP 740 attestations
-        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        if: steps.pypi_state.outputs.already_published != 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: release-bundle/dist/
           attestations: true
+          skip-existing: false
           print-hash: true
           verbose: true
+
+      - name: Verify exact PyPI publication
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          version="${GITHUB_REF_NAME#v}"
+          metadata="${RUNNER_TEMP}/countscape-pypi-release.json"
+          expected_records="$(
+            for artifact in "${wheel[0]}" "${sdist[0]}"; do
+              digest="$(sha256sum "${artifact}" | cut -d ' ' -f 1)"
+              printf '%s\t%s\n' "${digest}" "${artifact##*/}"
+            done | LC_ALL=C sort
+          )"
+
+          for attempt in {1..12}; do
+            status=""
+            if status="$(
+              curl --silent --show-error --location \
+                --proto '=https' --proto-redir '=https' \
+                --connect-timeout 5 --max-time 10 \
+                --max-filesize 1048576 \
+                --retry 1 --retry-delay 1 --retry-max-time 20 \
+                --header 'Accept: application/json' \
+                --header 'Cache-Control: no-cache' \
+                --output "${metadata}" --write-out '%{http_code}' \
+                "https://pypi.org/pypi/countscape/${version}/json"
+            )" && test "${status}" = 200 &&
+              jq -e --arg version "${version}" '
+                (.info.version == $version)
+                and ((.urls | type) == "array")
+                and all(.urls[];
+                  (.filename | type) == "string"
+                  and (.digests.sha256 | type) == "string"
+                  and .yanked == false
+                )
+              ' "${metadata}" > /dev/null; then
+              actual_records="$(
+                jq -r '.urls[] | [.digests.sha256, .filename] | @tsv' \
+                  "${metadata}" | LC_ALL=C sort
+              )"
+              if test "${actual_records}" = "${expected_records}"; then
+                exit 0
+              fi
+            fi
+            if test "${attempt}" -lt 12; then
+              sleep 5
+            fi
+          done
+          echo "PyPI does not expose the exact expected release files." >&2
+          exit 1
 
   github-release:
     name: Publish verified GitHub Release
     needs: publish
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       actions: read
@@ -284,9 +482,10 @@ jobs:
         working-directory: release-bundle/dist
         run: sha256sum --check ../release-assets/SHA256SUMS
 
-      - name: Download, reverify, and publish immutable release
+      - name: Reverify or publish immutable release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           wheel=(release-bundle/dist/*.whl)
@@ -294,27 +493,53 @@ jobs:
           test "${#wheel[@]}" -eq 1
           test "${#sdist[@]}" -eq 1
           checksum=release-bundle/release-assets/SHA256SUMS
+          notes=release-bundle/release-assets/RELEASE_NOTES.md
+          release_title="Countscape ${GITHUB_REF_NAME}"
           test -f "${checksum}"
+          test -f "${notes}"
 
           expected_assets="$(
             printf '%s\n' "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
               LC_ALL=C sort
           )"
+          release_state="$(
+            gh release view "${GITHUB_REF_NAME}" \
+              --json isDraft,isImmutable \
+              --jq '[.isDraft, .isImmutable] | @tsv'
+          )"
+          for attempt in {1..12}; do
+            case "${release_state}" in
+              $'true\tfalse' | $'false\ttrue')
+                break
+                ;;
+            esac
+            if test "${attempt}" -lt 12; then
+              sleep 5
+              release_state="$(
+                gh release view "${GITHUB_REF_NAME}" \
+                  --json isDraft,isImmutable \
+                  --jq '[.isDraft, .isImmutable] | @tsv'
+              )"
+            fi
+          done
+          case "${release_state}" in
+            $'true\tfalse' | $'false\ttrue') ;;
+            *)
+              echo "GitHub release is neither a mutable draft nor immutable." >&2
+              exit 1
+              ;;
+          esac
           actual_assets="$(
             gh release view "${GITHUB_REF_NAME}" --json assets \
               --jq '.assets[].name' |
               LC_ALL=C sort
           )"
           test "${actual_assets}" = "${expected_assets}"
-          test "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" = true
-
-          gh release view "${GITHUB_REF_NAME}" --json body --jq .body > "${RUNNER_TEMP}/countscape-release-body"
-          grep -F '## Support scope' "${RUNNER_TEMP}/countscape-release-body"
-          grep -F '## Known limitations' "${RUNNER_TEMP}/countscape-release-body"
-          grep -F '## Artifact SHA-256 digests' "${RUNNER_TEMP}/countscape-release-body"
-          while IFS= read -r digest; do
-            grep -F -- "${digest}" "${RUNNER_TEMP}/countscape-release-body"
-          done < "${checksum}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json isPrerelease --jq .isPrerelease)" = false
+          test "$(gh release view "${GITHUB_REF_NAME}" --json name --jq .name)" = "${release_title}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json tagName --jq .tagName)" = "${GITHUB_REF_NAME}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" = "$(<"${notes}")"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq .sha)" = "${GITHUB_SHA}"
 
           mkdir "${RUNNER_TEMP}/countscape-draft-assets"
           gh release download "${GITHUB_REF_NAME}" \
@@ -327,4 +552,47 @@ jobs:
             sha256sum --check SHA256SUMS
           )
 
+          if test "${release_state}" = $'false\ttrue'; then
+            echo "GitHub release is already published and immutable; recovered."
+            exit 0
+          fi
+
           gh release edit "${GITHUB_REF_NAME}" --draft=false --verify-tag
+          for attempt in {1..12}; do
+            release_state="$(
+              gh release view "${GITHUB_REF_NAME}" \
+                --json isDraft,isImmutable \
+                --jq '[.isDraft, .isImmutable] | @tsv'
+            )"
+            if test "${release_state}" = $'false\ttrue'; then
+              break
+            fi
+            if test "${attempt}" -lt 12; then
+              sleep 5
+            fi
+          done
+          if test "${release_state}" != $'false\ttrue'; then
+            echo "GitHub release did not become published and immutable." >&2
+            exit 1
+          fi
+
+          actual_assets="$(
+            gh release view "${GITHUB_REF_NAME}" --json assets \
+              --jq '.assets[].name' |
+              LC_ALL=C sort
+          )"
+          test "${actual_assets}" = "${expected_assets}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json isPrerelease --jq .isPrerelease)" = false
+          test "$(gh release view "${GITHUB_REF_NAME}" --json name --jq .name)" = "${release_title}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json tagName --jq .tagName)" = "${GITHUB_REF_NAME}"
+          test "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" = "$(<"${notes}")"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq .sha)" = "${GITHUB_SHA}"
+
+          immutable_directory="${RUNNER_TEMP}/countscape-immutable-assets"
+          mkdir "${immutable_directory}"
+          gh release download "${GITHUB_REF_NAME}" --dir "${immutable_directory}"
+          cmp "${checksum}" "${immutable_directory}/SHA256SUMS"
+          (
+            cd "${immutable_directory}"
+            sha256sum --check SHA256SUMS
+          )

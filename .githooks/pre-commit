@@ -6,7 +6,7 @@ repository_root="$(git rev-parse --show-toplevel)"
 cd "${repository_root}"
 
 git diff --cached --check
-uv run python tools/privacy_check.py --history
+uv run python tools/privacy_check.py --history --staged
 uv run python tools/check_markdown_links.py
 uv run ruff format --check .
 uv run ruff check .

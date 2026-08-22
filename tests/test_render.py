@@ -553,6 +553,11 @@ def test_concurrent_render_is_rejected(
 ) -> None:
     config, _source = configured_project
     layout = discover_layout(config.display)
+    render_wallpaper(
+        config,
+        layout,
+        now=datetime(2026, 8, 1, 11, 59, tzinfo=UTC),
+    )
     with (
         operation_lock(config.wallpaper.output_directory),
         pytest.raises(CountdownError, match="already running"),
@@ -562,3 +567,23 @@ def test_concurrent_render_is_rejected(
             layout,
             now=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
         )
+
+
+def test_render_refuses_preexisting_output_lock_sentinel(
+    configured_project: tuple[AppConfig, Path],
+) -> None:
+    config, _source = configured_project
+    output = config.wallpaper.output_directory
+    output.mkdir(parents=True)
+    sentinel = output / ".countscape.lock"
+    sentinel.write_text("user lock sentinel\n", encoding="utf-8")
+
+    with pytest.raises(StateError, match="unowned.*reserved files"):
+        render_wallpaper(
+            config,
+            discover_layout(config.display),
+            now=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "user lock sentinel\n"
+    assert not (output / ".countscape-owned.json").exists()

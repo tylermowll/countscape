@@ -10,6 +10,7 @@ it does not replace the canonical product documentation.
 - Upgrade, rollback, and removal: [canonical lifecycle guide](https://github.com/tylermowll/countscape/blob/main/docs/lifecycle.md)
 - Diagnostics: [canonical troubleshooting guide](https://github.com/tylermowll/countscape/blob/main/docs/troubleshooting.md)
 - Security boundary: [canonical security model](https://github.com/tylermowll/countscape/blob/main/docs/security-model.md)
+- Current publication status: [release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md)
 
 ## Community pages
 

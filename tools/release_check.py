@@ -10,12 +10,15 @@ import tarfile
 import tempfile
 import tomllib
 import zipfile
+from datetime import date
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_NAME = "countscape"
+SUPPORTED_PYTHON = ">=3.14,<3.15"
+LOCKED_PYTHON = "==3.14.*"
 
 
 def project_version() -> str:
@@ -25,6 +28,8 @@ def project_version() -> str:
     version = project.get("version") if isinstance(project, dict) else None
     if not isinstance(version, str) or not version.strip():
         raise ValueError("project.version is missing from pyproject.toml")
+    if project.get("requires-python") != SUPPORTED_PYTHON:
+        raise ValueError(f"project.requires-python must be exactly {SUPPORTED_PYTHON}")
     return version
 
 
@@ -34,6 +39,8 @@ def validate_single_version_source(version: str) -> None:
     packages = lock.get("package")
     if not isinstance(packages, list):
         raise ValueError("uv.lock has no package records")
+    if lock.get("requires-python") != LOCKED_PYTHON:
+        raise ValueError("uv.lock and project Python support do not match")
     local_packages = [
         package
         for package in packages
@@ -89,20 +96,25 @@ def validate_tag(tag: str, version: str) -> None:
         )
 
 
-def _metadata_identity(data: bytes) -> tuple[str, str]:
+def _metadata_identity(data: bytes) -> tuple[str, str, str]:
     metadata = BytesParser(policy=policy.default).parsebytes(data)
     names = metadata.get_all("Name", [])
     versions = metadata.get_all("Version", [])
-    if len(names) != 1 or len(versions) != 1:
-        raise ValueError("distribution metadata must contain one Name and Version")
-    return names[0], versions[0]
+    python_requirements = metadata.get_all("Requires-Python", [])
+    if len(names) != 1 or len(versions) != 1 or len(python_requirements) != 1:
+        raise ValueError(
+            "distribution metadata must contain one Name, Version, and Requires-Python"
+        )
+    return names[0], versions[0], python_requirements[0]
 
 
 def _validate_metadata_identity(data: bytes, version: str) -> None:
-    name, artifact_version = _metadata_identity(data)
+    name, artifact_version, python_requirement = _metadata_identity(data)
     normalized_name = re.sub(r"[-_.]+", "-", name).lower()
     if normalized_name != PROJECT_NAME or artifact_version != version:
         raise ValueError("distribution filename and embedded metadata do not match")
+    if "".join(python_requirement.split()) != SUPPORTED_PYTHON:
+        raise ValueError("distribution Python support does not match the v0.1 contract")
 
 
 def _validate_wheel_metadata(path: Path, version: str) -> None:
@@ -156,14 +168,18 @@ def validate_artifacts(paths: tuple[Path, ...], version: str) -> tuple[Path, ...
     return artifacts
 
 
-def write_checksums(path: Path, artifacts: tuple[Path, ...]) -> None:
-    lines = []
+def _checksum_text(artifacts: tuple[Path, ...]) -> str:
+    lines: list[str] = []
     for artifact in artifacts:
         digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
         lines.append(f"{digest}  {artifact.name}\n")
+    return "".join(lines)
+
+
+def _write_text(path: Path, content: str) -> None:
     destination = path.expanduser().absolute()
     if destination.is_symlink():
-        raise ValueError("checksum destination must not be a symbolic link")
+        raise ValueError("release output destination must not be a symbolic link")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     try:
@@ -175,12 +191,77 @@ def write_checksums(path: Path, artifacts: tuple[Path, ...]) -> None:
             delete=False,
         ) as handle:
             temporary = Path(handle.name)
-            handle.write("".join(lines))
+            handle.write(content)
         temporary.chmod(0o644)
         os.replace(temporary, destination)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+def write_checksums(path: Path, artifacts: tuple[Path, ...]) -> None:
+    _write_text(path, _checksum_text(artifacts))
+
+
+def changelog_section(version: str) -> str:
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    heading = re.compile(rf"^## {re.escape(version)} - ([^\n]+)$", re.MULTILINE)
+    matches = tuple(heading.finditer(text))
+    if len(matches) != 1:
+        raise ValueError("changelog must contain exactly one release-version section")
+    match = matches[0]
+    release_date = match.group(1).strip()
+    try:
+        parsed_date = date.fromisoformat(release_date)
+    except ValueError as error:
+        message = "release changelog heading must contain an ISO date"
+        raise ValueError(message) from error
+    if parsed_date.isoformat() != release_date:
+        raise ValueError("release changelog heading must contain an ISO date")
+    body_start = match.end()
+    following = re.search(r"^## ", text[body_start:], re.MULTILINE)
+    body_end = body_start + following.start() if following else len(text)
+    body = text[body_start:body_end].strip()
+    if not body:
+        raise ValueError("release changelog section must not be empty")
+    if re.search(r"publication is pending|not published until", body, re.IGNORECASE):
+        raise ValueError("release changelog still contains publication-pending text")
+    return body
+
+
+def render_release_notes(
+    tag: str,
+    version: str,
+    artifacts: tuple[Path, ...],
+) -> str:
+    changes = changelog_section(version)
+    checksums = _checksum_text(artifacts)
+    return (
+        f"# Countscape {tag}\n\n"
+        "## Changes\n\n"
+        f"{changes}\n\n"
+        "## Support scope\n\n"
+        "Countscape targets Python 3.14 on Ubuntu 26.04 with GNOME on "
+        "Wayland. It uses the current user's GNOME settings and systemd user "
+        "manager; root is not required for Countscape itself.\n\n"
+        "## Known limitations\n\n"
+        "- One private configuration represents one countdown and photo pool.\n"
+        "- X11, other desktop environments, other distributions, and other "
+        "operating systems are not supported release claims.\n"
+        "- Live GNOME compatibility is limited to the configurations explicitly "
+        "recorded as tested for this release.\n\n"
+        "## Artifact SHA-256 digests\n\n"
+        f"```text\n{checksums}```\n"
+    )
+
+
+def write_release_notes(
+    path: Path,
+    tag: str,
+    version: str,
+    artifacts: tuple[Path, ...],
+) -> None:
+    _write_text(path, render_release_notes(tag, version, artifacts))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -198,6 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--artifacts", nargs="+", type=Path, metavar="PATH")
     parser.add_argument("--write-checksums", type=Path, metavar="PATH")
+    parser.add_argument("--write-release-notes", type=Path, metavar="PATH")
     return parser
 
 
@@ -206,13 +288,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         version = project_version()
         validate_single_version_source(version)
-        if args.print_version and (args.tag or args.artifacts or args.write_checksums):
+        if args.print_version and (
+            args.tag
+            or args.artifacts
+            or args.write_checksums
+            or args.write_release_notes
+        ):
             raise ValueError("--print-version cannot be combined with other options")
         if args.print_version:
             print(version)
             return 0
         if args.tag:
             validate_tag(args.tag, version)
+            changelog_section(version)
         artifacts: tuple[Path, ...] = ()
         if args.artifacts:
             artifacts = validate_artifacts(tuple(args.artifacts), version)
@@ -220,6 +308,15 @@ def main(argv: list[str] | None = None) -> int:
             if not artifacts:
                 raise ValueError("--write-checksums requires --artifacts")
             write_checksums(args.write_checksums, artifacts)
+        if args.write_release_notes:
+            if not args.tag or not artifacts:
+                raise ValueError("--write-release-notes requires --tag and --artifacts")
+            write_release_notes(
+                args.write_release_notes,
+                args.tag,
+                version,
+                artifacts,
+            )
     except (
         OSError,
         SyntaxError,

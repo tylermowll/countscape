@@ -43,9 +43,11 @@ Enable the tracked repository-native pre-commit hook once per clone:
 git config core.hooksPath .githooks
 ```
 
-The hook runs staged-diff validation, the privacy and documentation checks,
-Ruff, and the complete branch-coverage test gate. CI repeats the same checks;
-do not bypass either gate to merge a change.
+The pre-commit hook validates the exact staged index as well as the worktree and
+reachable history, then runs the documentation checks, Ruff, and the complete
+branch-coverage test gate. The pre-push hook rechecks reachable history after
+the final commit message and metadata exist. CI repeats the same checks; do not
+bypass any gate to merge or publish a change.
 
 Use `uv` for every Python environment, dependency, command, lock, build, and
 test. Do not use bare `pip`, Poetry, or Conda. If dependencies change, update

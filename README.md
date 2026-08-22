@@ -2,7 +2,10 @@
 
 **A private, offline photo countdown wallpaper for Ubuntu GNOME.**
 
-![Countscape turns local photo cards and a countdown clock into a wallpaper across two displays.](https://raw.githubusercontent.com/tylermowll/countscape/main/docs/assets/countscape-hero.webp)
+[![CI](https://github.com/tylermowll/countscape/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tylermowll/countscape/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/tylermowll/countscape/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/tylermowll/countscape/actions/workflows/codeql.yml)
+
+![Countscape turns local photo cards and a countdown clock into a wallpaper across two displays.](https://raw.githubusercontent.com/tylermowll/countscape/7defea8c3ed9c05164069ff2d05e11a6cca45975/docs/assets/countscape-hero.webp)
 
 Countscape turns a folder of local photos into a timezone-aware countdown
 wallpaper. It understands GNOME/Wayland display layouts, renders every monitor as
@@ -189,6 +192,8 @@ monitor data, or other machine information.
 | [Security model](https://github.com/tylermowll/countscape/blob/main/docs/security-model.md) | Trust boundaries and local-data handling |
 | [Architecture](https://github.com/tylermowll/countscape/blob/main/docs/architecture.md) | Current implementation and data flow |
 | [Release checklist](https://github.com/tylermowll/countscape/blob/main/docs/release-checklist.md) | Artifact gates and live Ubuntu evidence |
+| [Release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md) | Current public-repository and v0.1 blocker status |
+| [Community Wiki](https://github.com/tylermowll/countscape/wiki) | Privacy-safe FAQ, recipes, and community troubleshooting |
 | [Support](https://github.com/tylermowll/countscape/blob/main/SUPPORT.md) | Supported scope and how to ask for help |
 
 The checked-in [example configuration](https://github.com/tylermowll/countscape/blob/main/config/countscape.example.toml) documents

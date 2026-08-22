@@ -58,7 +58,7 @@ SERVICE_NAME = "countscape.service"
 TIMER_NAME = "countscape.timer"
 INSTALL_MANIFEST_SCHEMA_VERSION = 1
 Runner = Callable[..., subprocess.CompletedProcess[str]]
-_OUTPUT_RESERVED = frozenset({"render-state.json"})
+_OUTPUT_RESERVED = frozenset({".countscape.lock", "render-state.json"})
 _CACHE_RESERVED = frozenset({"base.png", "base.json"})
 _UNIT_HEADER = (
     "# Managed by Countscape. Changes will be replaced by `countscape install`."

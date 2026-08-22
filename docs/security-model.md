@@ -12,6 +12,11 @@ units. It does not require root, provide a network service, upload photos, or us
 telemetry. Network access may be needed only to install Python and package
 dependencies; normal operation remains offline.
 
+The operating-system user account is the trust boundary. A hostile process
+already running as that same user can access the user's photos, GNOME settings,
+systemd user manager, and Countscape files. Ownership and digest checks are
+corruption defenses, not isolation from an equally privileged process.
+
 ## Sensitive data
 
 The following are private even though not all are secret credentials:

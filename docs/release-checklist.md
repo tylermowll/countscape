@@ -4,6 +4,9 @@ This checklist is the publication gate for Countscape. Complete it from a clean
 release candidate, retain redacted evidence, and do not claim a tag, package, or
 live platform validation before it exists.
 
+The current cross-machine status and unresolved blockers are recorded in the
+[public-repository readiness audit](audits/public-repository-readiness.md).
+
 ## 1. Define the release
 
 - [ ] Choose the exact version and intended tag, for example `0.1.0` and
@@ -51,8 +54,9 @@ uv run python tools/privacy_check.py \
   user path, secret, or editor state appears in either artifact.
 - [ ] Tracked files, screenshots, fixtures, metadata, all reachable refs, and Git
   objects are reviewed for private data.
-- [ ] Documentation links resolve and the synthetic hero has provenance, no
-  embedded personal metadata, and useful alt text.
+- [ ] Documentation links resolve and the synthetic hero and social-preview card
+  have provenance, no embedded personal metadata, and appropriate accessible
+  text where rendered in repository content.
 
 ## 3. Automated behavior gates
 
@@ -141,6 +145,8 @@ Evidence location: <private or redacted-safe reference>
   commit.
 - [ ] Create the GitHub release as a draft from the verified tag, with changelog,
   support scope, known limitations, and artifact digests.
+- [ ] Confirm automation replaced the complete draft title and body with the
+  deterministic, dated changelog section and exact tested artifact digests.
 - [ ] Attach exactly the tested wheel, source archive, and `SHA256SUMS` to the
   draft; do not rebuild or substitute an asset.
 - [ ] Verify the complete draft, attached filenames, checksums, notes, and tag.
