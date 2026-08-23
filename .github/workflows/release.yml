@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+  # Temporary, exact-source recovery for the interrupted v0.1.0 publication.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,6 +17,7 @@ concurrency:
 jobs:
   build:
     name: Validate and build release
+    if: github.event_name == 'push'
     runs-on: ubuntu-26.04
     timeout-minutes: 25
 
@@ -121,6 +124,7 @@ jobs:
 
   provenance:
     name: Attest release provenance
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -149,6 +153,7 @@ jobs:
 
   github-draft:
     name: Stage or recover GitHub release
+    if: github.event_name == 'push'
     needs:
       - build
       - provenance
@@ -268,6 +273,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
+    if: github.event_name == 'push'
     needs:
       - github-draft
     runs-on: ubuntu-24.04
@@ -276,7 +282,8 @@ jobs:
       name: pypi
       url: https://pypi.org/p/countscape
     permissions:
-      contents: read
+      # Mutable drafts require push access for an exact last-moment recheck.
+      contents: write
       id-token: write
 
     steps:
@@ -464,6 +471,7 @@ jobs:
 
   github-release:
     name: Publish verified GitHub Release
+    if: github.event_name == 'push'
     needs: publish
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -596,3 +604,359 @@ jobs:
             cd "${immutable_directory}"
             sha256sum --check SHA256SUMS
           )
+
+  # This pair is deliberately pinned to the interrupted v0.1.0 run. Remove it
+  # immediately after the exact original artifacts have reached PyPI.
+  recover-preflight:
+    name: Verify interrupted v0.1.0 release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    env:
+      RELEASE_TAG: v0.1.0
+      SOURCE_RUN_ID: "32614131456"
+      SOURCE_ARTIFACT_ID: "9486405893"
+      SOURCE_ARTIFACT_DIGEST: sha256:75fc76bd02382f05adeda5cb0e0ad5d7e72aad81211c6272f3752ba2dfc5bbd7
+      EXPECTED_SHA: ba7d44276b25e7c66813d82a526bee606884ba96
+      EXPECTED_WHEEL_SHA256: b35024538c8d972e8ee9ed0fb4631973e84222d3d5a4b7c53c8a1a4a597fda76
+      EXPECTED_SDIST_SHA256: 565db30780592ce92f9d7e9891a77b577dd23484df97e4b3036f36cd9346f9a2
+
+    steps:
+      - name: Validate exact recovery source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = tylermowll/countscape
+          test "${GITHUB_ACTOR}" = tylermowll
+          test "${GITHUB_REF}" = refs/heads/main
+          test "$(
+            gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha
+          )" = "${GITHUB_SHA}"
+          test "$(
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha
+          )" = "${EXPECTED_SHA}"
+
+          run_metadata="${RUNNER_TEMP}/countscape-source-run.json"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" \
+            > "${run_metadata}"
+          jq -e \
+            --arg event push \
+            --arg head_branch "${RELEASE_TAG}" \
+            --arg head_sha "${EXPECTED_SHA}" \
+            --arg path .github/workflows/release.yml \
+            --argjson id "${SOURCE_RUN_ID}" '
+              .id == $id
+              and .event == $event
+              and .head_branch == $head_branch
+              and .head_sha == $head_sha
+              and .path == $path
+              and .status == "completed"
+            ' "${run_metadata}" > /dev/null
+
+          artifact_metadata="${RUNNER_TEMP}/countscape-source-artifacts.json"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+            > "${artifact_metadata}"
+          jq -e \
+            --arg digest "${SOURCE_ARTIFACT_DIGEST}" \
+            --arg name "countscape-release-${RELEASE_TAG}" \
+            --argjson id "${SOURCE_ARTIFACT_ID}" '
+              [
+                .artifacts[]
+                | select(
+                    .id == $id
+                    and .name == $name
+                    and .digest == $digest
+                    and .expired == false
+                  )
+              ]
+              | length == 1
+            ' "${artifact_metadata}" > /dev/null
+
+      - name: Download exact original release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: countscape-release-v0.1.0
+          path: release-bundle
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: "32614131456"
+
+      - name: Verify original bundle and mutable draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          test "${wheel[0]##*/}" = countscape-0.1.0-py3-none-any.whl
+          test "${sdist[0]##*/}" = countscape-0.1.0.tar.gz
+          test "$(sha256sum "${wheel[0]}" | cut -d ' ' -f 1)" \
+            = "${EXPECTED_WHEEL_SHA256}"
+          test "$(sha256sum "${sdist[0]}" | cut -d ' ' -f 1)" \
+            = "${EXPECTED_SDIST_SHA256}"
+          checksum=release-bundle/release-assets/SHA256SUMS
+          notes=release-bundle/release-assets/RELEASE_NOTES.md
+          test -f "${checksum}"
+          test -f "${notes}"
+          (
+            cd release-bundle/dist
+            sha256sum --check ../release-assets/SHA256SUMS
+          )
+
+          release_metadata="${RUNNER_TEMP}/countscape-draft-release.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/375099485" \
+            > "${release_metadata}"
+          jq -e \
+            --arg body "$(<"${notes}")" \
+            --arg name "Countscape ${RELEASE_TAG}" \
+            --arg tag "${RELEASE_TAG}" '
+              .id == 375099485
+              and .draft == true
+              and .immutable == false
+              and .prerelease == false
+              and .name == $name
+              and .tag_name == $tag
+              and .body == $body
+            ' "${release_metadata}" > /dev/null
+          expected_assets="$(
+            printf '%s\n' \
+              "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
+              LC_ALL=C sort
+          )"
+          actual_assets="$(
+            jq -r '.assets[].name' "${release_metadata}" |
+              LC_ALL=C sort
+          )"
+          test "${actual_assets}" = "${expected_assets}"
+
+          draft_assets="${RUNNER_TEMP}/countscape-recovery-draft-assets"
+          mkdir "${draft_assets}"
+          gh release download "${RELEASE_TAG}" --dir "${draft_assets}"
+          cmp "${checksum}" "${draft_assets}/SHA256SUMS"
+          (
+            cd "${draft_assets}"
+            sha256sum --check SHA256SUMS
+          )
+
+  recover-pypi:
+    name: Publish exact interrupted artifacts to PyPI
+    if: github.event_name == 'workflow_dispatch'
+    needs: recover-preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/countscape
+    permissions:
+      actions: read
+      # The exact mutable draft is checked again after environment approval.
+      contents: write
+      id-token: write
+    env:
+      RELEASE_TAG: v0.1.0
+      SOURCE_RUN_ID: "32614131456"
+      EXPECTED_SHA: ba7d44276b25e7c66813d82a526bee606884ba96
+      EXPECTED_WHEEL_SHA256: b35024538c8d972e8ee9ed0fb4631973e84222d3d5a4b7c53c8a1a4a597fda76
+      EXPECTED_SDIST_SHA256: 565db30780592ce92f9d7e9891a77b577dd23484df97e4b3036f36cd9346f9a2
+
+    steps:
+      - name: Download exact original release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: countscape-release-v0.1.0
+          path: release-bundle
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: "32614131456"
+
+      - name: Reverify exact source and bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = tylermowll/countscape
+          test "${GITHUB_ACTOR}" = tylermowll
+          test "${GITHUB_REF}" = refs/heads/main
+          test "$(
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha
+          )" = "${EXPECTED_SHA}"
+          test "$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" \
+              --jq .head_sha
+          )" = "${EXPECTED_SHA}"
+
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          test "${#wheel[@]}" -eq 1
+          test "${#sdist[@]}" -eq 1
+          test "${wheel[0]##*/}" = countscape-0.1.0-py3-none-any.whl
+          test "${sdist[0]##*/}" = countscape-0.1.0.tar.gz
+          test "$(sha256sum "${wheel[0]}" | cut -d ' ' -f 1)" \
+            = "${EXPECTED_WHEEL_SHA256}"
+          test "$(sha256sum "${sdist[0]}" | cut -d ' ' -f 1)" \
+            = "${EXPECTED_SDIST_SHA256}"
+          (
+            cd release-bundle/dist
+            sha256sum --check ../release-assets/SHA256SUMS
+          )
+
+          checksum=release-bundle/release-assets/SHA256SUMS
+          notes=release-bundle/release-assets/RELEASE_NOTES.md
+          test -f "${checksum}"
+          test -f "${notes}"
+          release_metadata="${RUNNER_TEMP}/countscape-draft-release.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/375099485" \
+            > "${release_metadata}"
+          jq -e \
+            --arg body "$(<"${notes}")" \
+            --arg name "Countscape ${RELEASE_TAG}" \
+            --arg tag "${RELEASE_TAG}" '
+              .id == 375099485
+              and .draft == true
+              and .immutable == false
+              and .prerelease == false
+              and .name == $name
+              and .tag_name == $tag
+              and .body == $body
+            ' "${release_metadata}" > /dev/null
+          expected_assets="$(
+            printf '%s\n' \
+              "${wheel[0]##*/}" "${sdist[0]##*/}" "${checksum##*/}" |
+              LC_ALL=C sort
+          )"
+          actual_assets="$(
+            jq -r '.assets[].name' "${release_metadata}" |
+              LC_ALL=C sort
+          )"
+          test "${actual_assets}" = "${expected_assets}"
+
+          draft_assets="${RUNNER_TEMP}/countscape-publish-draft-assets"
+          mkdir "${draft_assets}"
+          gh release download "${RELEASE_TAG}" --dir "${draft_assets}"
+          cmp "${checksum}" "${draft_assets}/SHA256SUMS"
+          (
+            cd "${draft_assets}"
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Detect an exact prior PyPI publication
+        id: pypi_state
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          metadata="${RUNNER_TEMP}/countscape-pypi-release.json"
+          expected_records="$(
+            printf '%s\t%s\n' \
+              "${EXPECTED_SDIST_SHA256}" "${sdist[0]##*/}" \
+              "${EXPECTED_WHEEL_SHA256}" "${wheel[0]##*/}" |
+              LC_ALL=C sort
+          )"
+          status="$(
+            curl --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' \
+              --connect-timeout 10 --max-time 30 \
+              --max-filesize 1048576 \
+              --retry 4 --retry-delay 2 --retry-max-time 90 \
+              --header 'Accept: application/json' \
+              --header 'Cache-Control: no-cache' \
+              --output "${metadata}" --write-out '%{http_code}' \
+              'https://pypi.org/pypi/countscape/0.1.0/json'
+          )"
+          case "${status}" in
+            200)
+              jq -e '
+                .info.version == "0.1.0"
+                and ((.urls | type) == "array")
+                and all(.urls[];
+                  (.filename | type) == "string"
+                  and (.digests.sha256 | type) == "string"
+                  and .yanked == false
+                )
+              ' "${metadata}" > /dev/null
+              actual_records="$(
+                jq -r '.urls[] | [.digests.sha256, .filename] | @tsv' \
+                  "${metadata}" | LC_ALL=C sort
+              )"
+              test "${actual_records}" = "${expected_records}"
+              printf 'already_published=true\n' >> "${GITHUB_OUTPUT}"
+              ;;
+            404)
+              printf 'already_published=false\n' >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "PyPI release lookup returned HTTP ${status}." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Publish with Trusted Publishing and PEP 740 attestations
+        if: steps.pypi_state.outputs.already_published != 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: release-bundle/dist/
+          attestations: true
+          skip-existing: false
+          print-hash: true
+          verbose: true
+
+      - name: Verify exact PyPI publication
+        run: |
+          set -euo pipefail
+          wheel=(release-bundle/dist/*.whl)
+          sdist=(release-bundle/dist/*.tar.gz)
+          metadata="${RUNNER_TEMP}/countscape-pypi-release.json"
+          expected_records="$(
+            printf '%s\t%s\n' \
+              "${EXPECTED_SDIST_SHA256}" "${sdist[0]##*/}" \
+              "${EXPECTED_WHEEL_SHA256}" "${wheel[0]##*/}" |
+              LC_ALL=C sort
+          )"
+
+          for attempt in {1..12}; do
+            status=""
+            if status="$(
+              curl --silent --show-error --location \
+                --proto '=https' --proto-redir '=https' \
+                --connect-timeout 5 --max-time 10 \
+                --max-filesize 1048576 \
+                --retry 1 --retry-delay 1 --retry-max-time 20 \
+                --header 'Accept: application/json' \
+                --header 'Cache-Control: no-cache' \
+                --output "${metadata}" --write-out '%{http_code}' \
+                'https://pypi.org/pypi/countscape/0.1.0/json'
+            )" && test "${status}" = 200 &&
+              jq -e '
+                .info.version == "0.1.0"
+                and ((.urls | type) == "array")
+                and all(.urls[];
+                  (.filename | type) == "string"
+                  and (.digests.sha256 | type) == "string"
+                  and .yanked == false
+                )
+              ' "${metadata}" > /dev/null; then
+              actual_records="$(
+                jq -r '.urls[] | [.digests.sha256, .filename] | @tsv' \
+                  "${metadata}" | LC_ALL=C sort
+              )"
+              if test "${actual_records}" = "${expected_records}"; then
+                exit 0
+              fi
+            fi
+            if test "${attempt}" -lt 12; then
+              sleep 5
+            fi
+          done
+          echo "PyPI does not expose the exact expected release files." >&2
+          exit 1
