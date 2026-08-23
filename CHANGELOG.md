@@ -40,6 +40,13 @@ artifact, and live Ubuntu 26.04 evidence all pass the
 - Managed directories use config-bound ownership markers and strict filename
   allowlists.
 - Generated user units are content-hashed; foreign or edited units are refused.
+- Managed unit regeneration keeps unit sources and the manifest
+  digest-consistent across failures, and uninstall retains validated ownership
+  evidence until destructive systemd cleanup succeeds.
+- Lifecycle manifest schema v2 records the persistent systemd user-unit link
+  directory for uninstall; pre-v0.1 integration state is not migrated.
+- Source images have a fixed 50,000,000-pixel decode ceiling, and Pillow decode
+  and decompression-bomb failures are reported as controlled input errors.
 - Automated tests use temporary XDG roots and fake desktop adapters.
 - Repository and release privacy checks screen for disallowed private and
   machine-local artifacts.

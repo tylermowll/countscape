@@ -10,14 +10,23 @@ Replace the package first, then regenerate integration. Remove integration
 before removing the package. These orders keep the service executable available
 and make rollback predictable.
 
+Run lifecycle changes sequentially. `countscape install` and
+`countscape uninstall` must not overlap each other, `countscape render`,
+`countscape apply`, or a timer-started service run. Wait for the active command
+or service invocation to finish, then retry the lifecycle command. This
+operating constraint is not a crash journal or power-loss durability guarantee.
+
 > [!IMPORTANT]
 > v0.1.0 publication is pending. Use only versions shown on both the
 > [release page](https://github.com/tylermowll/countscape/releases) and PyPI.
 
-Pre-v0.1 preview config and integration state have no migration path. Remove
-preview integration with the matching preview code before installing v0.1, then
-run `countscape init --force` and re-enter the private target and paths. Do not
-change an old schema number or copy preview state into the v0.1 runtime directory.
+Pre-v0.1 preview config and integration-state schemas have no migration path.
+The v0.1 lifecycle manifest uses schema v2 and records the persistent systemd
+user-unit link directory, so uninstall does not derive that directory from later
+ambient XDG variables. Remove preview integration with the matching preview code
+before installing v0.1, then run `countscape init --force` and re-enter the
+private target and paths. Do not change an old schema number or copy preview
+state into the v0.1 runtime directory.
 
 ## Install v0.1.0
 
@@ -107,10 +116,12 @@ Remove desktop integration while the package command is still available:
 countscape uninstall
 ```
 
-Uninstall stops and removes validated Countscape user units. Each light and dark
-wallpaper URI is restored only while it remains Countscape-managed; a newer user
-choice is preserved. If restoration cannot be proven safe, removal stops and
-asks you to choose another wallpaper before retrying.
+Uninstall stops Countscape's managed timer and service, removes only the exact
+validated user-manager links and unit sources, and verifies their absence. Each
+light and dark wallpaper URI is restored only while it remains
+Countscape-managed; a newer user choice is preserved. If restoration cannot be
+proven safe, removal stops and asks you to choose another wallpaper before
+retrying.
 
 For a nondefault config, use its absolute path:
 
@@ -142,11 +153,18 @@ It never deletes an entire configured directory. Review the paths in
 ## Recover from an interrupted change
 
 - If package replacement succeeded but integration regeneration failed, keep the
-  package installed, correct the `doctor` error, and rerun `countscape install`.
+  package installed and rerun `countscape install`. Countscape restores the
+  prior digest-consistent unit and manifest bytes if publishing their replacement
+  fails; after publication, a systemd failure leaves the complete new generation
+  available for retry. Do not delete units or state by hand.
 - If the new package cannot start, force-install the previous exact version,
   then run `doctor` and `install` again.
 - If uninstall stops during wallpaper restoration, choose a non-Countscape
   wallpaper in GNOME Settings and rerun `countscape uninstall`.
+- If uninstall stops during unit removal or user-manager reload, leave the
+  ownership markers and manifest in place and rerun `countscape uninstall`.
+  Countscape retains that evidence until destructive integration cleanup
+  succeeds.
 - If config is missing or corrupt, recover its recorded runtime state directory
   from the user's own config backup and pass it with `--state-directory`.
 - Never delete unit, state, output, or cache files to bypass an ownership error.

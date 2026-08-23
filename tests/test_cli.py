@@ -8,7 +8,13 @@ from conftest import write_config
 
 import countscape.cli as cli
 from countscape.config import load_config
-from countscape.errors import ConfigError, CountdownError, IntegrationError, StateError
+from countscape.errors import (
+    ConfigError,
+    CountdownError,
+    IntegrationError,
+    PhotoError,
+    StateError,
+)
 
 
 def _set_xdg_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
@@ -728,6 +734,30 @@ def test_render_and_apply_commands_forward_outputs_and_retry_count(
     assert cli.main(["apply", "--config", str(config_path), "--retries", "3"]) == 0
     assert received == [(config_path, 3)]
     assert capsys.readouterr().out == f"{applied}\n"
+
+
+def test_render_cli_reports_photo_decode_failure_without_a_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = write_config(tmp_path)
+    config = load_config(config_path)
+    layout = config.display.profiles["fixture"]
+    monkeypatch.setattr(cli, "load_config", lambda _path: config)
+    monkeypatch.setattr(cli, "discover_layout", lambda _display: layout)
+
+    def fail_render(_config: object, _layout: object) -> Path:
+        raise PhotoError("unreadable image: synthetic.jpg: image file is truncated")
+
+    monkeypatch.setattr(cli, "render_wallpaper", fail_render)
+
+    assert cli.main(["render", "--config", str(config_path)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "countscape: unreadable image: synthetic.jpg: image file is truncated\n"
+    )
 
 
 @pytest.mark.parametrize("apply_result", (False, True))
