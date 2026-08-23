@@ -1,8 +1,7 @@
 # Public Repository Readiness
 
-Status: **public-repository checkpoint verified on 2026-08-22**; **v0.1 release
-runtime live-platform evidence verified on 2026-08-23**. Publication still
-requires exact tagged-artifact and package-channel verification.
+Status: **public-repository checkpoint verified on 2026-08-22**; **Countscape
+0.1.0 published and independently verified on 2026-08-23**.
 
 This is the current, cross-machine handoff for Countscape. It replaces the
 earlier dated working audit. Live GitHub settings remain independently
@@ -15,12 +14,13 @@ This audit answers two separate questions:
 
 1. Is the source repository safe, understandable, and maintainable as a public
    project?
-2. Is Countscape v0.1 ready to publish as a tagged GitHub and PyPI release?
+2. Was Countscape v0.1 published and verified as a tagged GitHub and PyPI
+   release?
 
-The source-repository checkpoint is complete. The runtime code intended for
-v0.1 has passed the required local and live-platform gates; exact tagged-artifact
-validation, protected publication, and public-install verification remain
-separate steps.
+Both checkpoints are complete. The source repository passed its privacy and
+maintainability gates. Protected tag `v0.1.0`, its exact GitHub and PyPI
+artifacts, the public-index installation, and recorded live-platform evidence
+were verified separately.
 
 ## Public-data conclusion
 
@@ -91,8 +91,8 @@ The final local gate used Python 3.14.4 and the committed `uv.lock`:
 - worktree, reachable-history, staged-content, and release-artifact privacy
   checks passed;
 - all 24 local Markdown documents passed link validation;
-- Ruff reported all 59 Python files formatted and no lint findings;
-- all 347 tests passed with 90.39% branch coverage;
+- Ruff reported all 60 Python files formatted and no lint findings;
+- all 348 tests passed with 90.39% branch coverage;
 - `countscape-0.1.0-py3-none-any.whl` and
   `countscape-0.1.0.tar.gz` passed exact-set, metadata, and privacy validation;
   and
@@ -112,6 +112,33 @@ merges, and deletion/non-fast-forward protection. The active `v*` tag ruleset
 protects creation, update, deletion, and non-fast-forward changes. The `pypi`
 environment accepts only `v*` tags and requires maintainer review. These
 controls cannot be proven by cloning the repository alone.
+
+## Published v0.1.0 evidence
+
+Protected annotated tag `v0.1.0` dereferences to
+`ba7d44276b25e7c66813d82a526bee606884ba96`. The canonical
+[tag-triggered release run](https://github.com/tylermowll/countscape/actions/runs/32614131456)
+completed successfully after independently recovering against the already
+published files. The public
+[GitHub release](https://github.com/tylermowll/countscape/releases/tag/v0.1.0)
+is non-prerelease and immutable, with the original three assets unchanged.
+
+The public [PyPI release](https://pypi.org/project/countscape/0.1.0/) exposes
+exactly two unyanked distributions:
+
+- `countscape-0.1.0-py3-none-any.whl`, 45,873 bytes, SHA-256
+  `b35024538c8d972e8ee9ed0fb4631973e84222d3d5a4b7c53c8a1a4a597fda76`;
+  and
+- `countscape-0.1.0.tar.gz`, 38,931 bytes, SHA-256
+  `565db30780592ce92f9d7e9891a77b577dd23484df97e4b3036f36cd9346f9a2`.
+
+PyPI's Integrity API exposes a valid publish-attestation bundle for each file.
+Both identify GitHub repository `tylermowll/countscape`, workflow `release.yml`,
+and environment `pypi`; independent cryptographic verification with
+`pypi-attestations` passed. A fresh Python 3.14 tool installation resolved
+`countscape==0.1.0` and Pillow from the public PyPI index and passed version,
+top-level help, and lifecycle-subcommand help checks under temporary XDG roots.
+It did not apply a wallpaper or alter display configuration.
 
 ## Supported-host baseline
 
@@ -147,27 +174,31 @@ state were removed. No raw monitor state, generated wallpaper, or live-session
 screenshot was retained in the repository.
 
 The release-preparation changes after `1a45605` are documentation-only; package
-runtime code is unchanged. The tag workflow must build and smoke-test the exact
-tagged wheel and source archive, and the public artifact must receive a separate
-clean-install verification after publication.
+runtime code is unchanged. The protected tag workflow built, audited, and
+smoke-tested the exact wheel and source archive now published on both channels.
+The separate public-index installation recorded above verifies distribution,
+not additional live-display coverage; the transformed, scaled, and mirrored
+evidence remains tied to the identical runtime code described here.
 
-## Remaining v0.1 publication steps
+## v0.1 publication result
 
-No source-code or live-platform blocker remains. Before creating the protected
-tag:
+Publication completed through the protected `pypi` environment and PyPI Trusted
+Publishing. An interrupted first attempt was recovered without moving the tag,
+rebuilding the distributions, or replacing draft assets: the recovery path
+required the original run ID, artifact ID and digest, tag target, release ID,
+filenames, metadata, and file hashes before upload. PyPI was verified before the
+existing GitHub draft became public and immutable. The original tag-triggered
+workflow then recovered against those exact public files and completed green.
 
-- confirm the pending PyPI Trusted Publisher for the `countscape` project and
-  the repository's protected `pypi` environment; and
-- create the protected `v0.1.0` tag only from the reviewed, green release commit.
+The temporary main-branch environment allowance was removed immediately after
+publication; the `pypi` environment again accepts only `v*` tags. The one-time
+workflow-dispatch recovery jobs were removed after use. The durable workflow fix
+retains push access only where the PyPI job must reverify a mutable GitHub draft
+immediately before upload, with a focused regression test.
 
-The tag-triggered workflow must stage and verify the exact GitHub draft, publish
-the same tested files to PyPI through Trusted Publishing, and publish the
-immutable GitHub release. After the workflow completes, a separate clean public
-install must pass verification.
-
-Uploading the reviewed social-preview PNG in GitHub's repository settings is
-optional repository polish. It affects link cards when the repository is shared,
-not Countscape behavior, packaging, security, or v0.1 publication readiness.
+Uploading the reviewed social-preview PNG in GitHub's repository settings
+remains optional repository polish. It affects link cards when the repository
+is shared, not Countscape behavior, packaging, security, or release validity.
 
 Never replace an immutable published artifact. Correct a released artifact with
 a new version.

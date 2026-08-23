@@ -191,7 +191,7 @@ monitor data, or other machine information.
 | [Security model](https://github.com/tylermowll/countscape/blob/main/docs/security-model.md) | Trust boundaries and local-data handling |
 | [Architecture](https://github.com/tylermowll/countscape/blob/main/docs/architecture.md) | Current implementation and data flow |
 | [Release checklist](https://github.com/tylermowll/countscape/blob/main/docs/release-checklist.md) | Artifact gates and live Ubuntu evidence |
-| [Release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md) | Current public-repository and v0.1 blocker status |
+| [Release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md) | v0.1 release evidence and project status |
 | [Community Wiki](https://github.com/tylermowll/countscape/wiki) | Privacy-safe FAQ, recipes, and community troubleshooting |
 | [Support](https://github.com/tylermowll/countscape/blob/main/SUPPORT.md) | Supported scope and how to ask for help |
 

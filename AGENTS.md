@@ -60,9 +60,11 @@ wallpapers, caches, or absolute user paths.
 
 The package, `countscape init`, XDG data split, independent second-based
 schedules, render reuse, idempotent GNOME apply, installed-package service, and
-ownership-marker uninstall are implemented. Do not describe PyPI publication,
-a tagged release, broader platform support, or live release validation as
-complete until evidence exists.
+ownership-marker uninstall are implemented. Version 0.1.0 is published on PyPI
+and as an immutable GitHub release from protected tag `v0.1.0`. The exact public
+wheel and source archive, a clean public-index installation, and both PyPI
+publish attestations were verified on 2026-08-23. Do not claim broader platform
+support or live configurations beyond the recorded evidence.
 
 The checked-in example intentionally has `event.confirmed = false`. Do not turn
 it into an installable default target; user configuration must be generated or
