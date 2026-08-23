@@ -17,7 +17,7 @@ or service invocation to finish, then retry the lifecycle command. This
 operating constraint is not a crash journal or power-loss durability guarantee.
 
 > [!IMPORTANT]
-> v0.1.0 publication is pending. Use only versions shown on both the
+> Use only exact versions shown on both the
 > [release page](https://github.com/tylermowll/countscape/releases) and PyPI.
 
 Pre-v0.1 preview config and integration-state schemas have no migration path.

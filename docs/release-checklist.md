@@ -17,8 +17,9 @@ The current cross-machine status and unresolved blockers are recorded in the
 - [ ] Review installation, upgrade, rollback, and uninstall instructions for the
   exact release.
 - [ ] Confirm [SECURITY.md](../SECURITY.md) names the supported release line.
-- [ ] Confirm documentation contains no pending-release wording that would be
-  false after publication.
+- [ ] Replace pending-release wording in package-description content with
+  exact-channel guidance that remains true after publication; tagged wheel and
+  source-archive descriptions cannot be corrected in place.
 
 ## 2. Clean-tree verification
 
@@ -164,8 +165,9 @@ Evidence location: <private or redacted-safe reference>
   the public artifact.
 - [ ] Verify package links for source, issues, documentation, changelog, and
   security.
-- [ ] Remove the README publication-pending notice only after both release
-  channels and the public-install verification succeed.
+- [ ] After both channels and the public-install verification succeed, update
+  time-sensitive status records on the default branch without implying that
+  tagged artifacts can be changed in place.
 
 ## 6. Repository community settings
 

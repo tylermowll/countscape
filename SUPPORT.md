@@ -5,8 +5,9 @@ the project supports and how to ask for help without publishing private data.
 
 ## Current support boundary
 
-v0.1.0 publication is pending. Before publication, source-tree questions are
-handled as contributor issues; there is no supported packaged release.
+Published v0.1 releases are community-supported. A version counts as published
+only when the exact version appears on both the GitHub release page and PyPI;
+questions about other source revisions are handled as contributor issues.
 
 The v0.1 target is:
 

@@ -13,11 +13,10 @@ one coherent canvas, and updates the wallpaper from a user-scoped systemd timer.
 Your source photos stay where they are and are never modified.
 
 > [!IMPORTANT]
-> **v0.1.0 publication is pending.** The release commands below are the v0.1
-> install contract, but the package-index install will not work until v0.1.0
-> appears on both the
-> [release page](https://github.com/tylermowll/countscape/releases) and PyPI.
-> Contributors can run the project from source using
+> Install only exact versions that appear on both the
+> [release page](https://github.com/tylermowll/countscape/releases) and PyPI;
+> an untagged source revision is not a published release. Contributors can run
+> the project from source using
 > [CONTRIBUTING.md](https://github.com/tylermowll/countscape/blob/main/CONTRIBUTING.md).
 
 ## Why Countscape

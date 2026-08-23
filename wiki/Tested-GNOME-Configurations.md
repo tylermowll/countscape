@@ -4,14 +4,16 @@ This page records redacted live-session evidence, not guesses about compatible
 systems. The canonical support target is defined in the
 [install guide](https://github.com/tylermowll/countscape/blob/main/docs/install.md).
 
-> **Current evidence:** v0.1.0 live Ubuntu 26.04 validation is pending. No tested
-> configuration is published yet.
+> **Current evidence:** the runtime code intended for v0.1.0 passed redacted live
+> Ubuntu 26.04 validation on GNOME/Wayland, including transformed, scaled, and
+> mirrored layouts. Exact tagged artifacts and publication state must still be
+> verified.
 
 ## Evidence table
 
 | Countscape | Ubuntu | GNOME | Wayland | Display class | Result | Evidence date |
 |---|---|---|---|---|---|---|
-| 0.1.0 pending | 26.04 | Pending | Required | Pending | Not run | Pending |
+| 0.1.0 runtime build | 26.04 | 50.1 | Yes | Mixed orientation with transform; 125% scaling; mirrored | Pass | 2026-08-23 |
 
 An entry can be marked passing only when the applicable live checks in the
 [release checklist](https://github.com/tylermowll/countscape/blob/main/docs/release-checklist.md)
