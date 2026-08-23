@@ -4,8 +4,7 @@ This is the canonical first-install guide for Countscape v0.1. For upgrades,
 rollbacks, reinstalls, and removal, use [Lifecycle](lifecycle.md).
 
 > [!IMPORTANT]
-> v0.1.0 publication is pending. The package-index command below becomes valid
-> only after v0.1.0 appears on the
+> Use the package-index command below only when v0.1.0 appears on both the
 > [GitHub release page](https://github.com/tylermowll/countscape/releases) and
 > PyPI. Do not treat an untagged source revision as a published release.
 

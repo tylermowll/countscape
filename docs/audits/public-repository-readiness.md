@@ -1,7 +1,8 @@
 # Public Repository Readiness
 
 Status: **public-repository checkpoint verified on 2026-08-22**; **v0.1 release
-remains blocked**.
+runtime live-platform evidence verified on 2026-08-23**. Publication still
+requires exact tagged-artifact and package-channel verification.
 
 This is the current, cross-machine handoff for Countscape. It replaces the
 earlier dated working audit. Live GitHub settings remain independently
@@ -16,7 +17,10 @@ This audit answers two separate questions:
    project?
 2. Is Countscape v0.1 ready to publish as a tagged GitHub and PyPI release?
 
-The first is the active goal. The second remains a later release gate.
+The source-repository checkpoint is complete. The runtime code intended for
+v0.1 has passed the required local and live-platform gates; exact tagged-artifact
+validation, protected publication, and public-install verification remain
+separate steps.
 
 ## Public-data conclusion
 
@@ -77,8 +81,8 @@ arbitrary systemd topologies.
 The pure countdown, configuration, display, selection, and rendering core has
 strong local automated evidence. The GNOME/systemd lifecycle is defensively
 designed and now has targeted injected-failure coverage for regeneration and
-destructive uninstall retry paths. Full live platform validation remains a
-separate release gate.
+destructive uninstall retry paths. Live platform validation is recorded
+separately below.
 
 ## Verification evidence
 
@@ -111,13 +115,13 @@ controls cannot be proven by cloning the repository alone.
 
 ## Supported-host baseline
 
-The final wheel was exercised on 2026-08-22 on Ubuntu 26.04, GNOME 50.1,
-Wayland, and a two-logical-monitor mixed-orientation layout with a physical
-transform. A synthetic public source rendered to the discovered 3120x1920
-canvas and was visually reviewed. `doctor`, unchanged apply reuse, live timer
-execution, schedule regeneration from 5 to 10 and back to 5 seconds,
-installation-identity preservation, unchanged reinstall, and reinstall under a
-different ambient `XDG_CONFIG_HOME` all passed.
+A v0.1.0 wheel built from runtime commit `1a45605` was exercised on 2026-08-22
+on Ubuntu 26.04, GNOME 50.1, Wayland, and a two-logical-monitor
+mixed-orientation layout with a physical transform. A synthetic public source
+rendered to the discovered 3120x1920 canvas and was visually reviewed. `doctor`,
+unchanged apply reuse, live timer execution, schedule regeneration from 5 to 10
+and back to 5 seconds, installation-identity preservation, unchanged reinstall,
+and reinstall under a different ambient `XDG_CONFIG_HOME` all passed.
 
 Temporary alias and drop-in fixtures under an external effective systemd user
 unit root were each rejected before the timer stopped or managed evidence
@@ -127,20 +131,39 @@ validated units and links, and preserved configuration. The temporary tool
 environment, fixtures, and generated output were then removed; no live
 wallpaper or screenshot was retained in the repository.
 
-This baseline does not cover a live scaled or mirrored layout and therefore is
-not the complete release-platform matrix.
+The same runtime wheel was then exercised on 2026-08-23 under two additional
+temporary Mutter configurations. With both displays at 125% scale, redacted
+`doctor` output reported two logical monitors, scaling, and the existing
+transform; the rendered 3120x1920 synthetic wallpaper was visually reviewed.
+With both physical displays mirrored through a shared mode, `doctor` reported
+one mirrored logical monitor and the rendered 1920x1080 synthetic wallpaper was
+visually reviewed.
 
-## Separate v0.1 release blockers
+The original display arrangement was restored between cases and after the final
+case. The persistent GNOME monitor-configuration digest and modification time
+were unchanged, as were the synthetic source bytes and modification time. The
+temporary tool installation, private config, generated wallpapers, cache, and
+state were removed. No raw monitor state, generated wallpaper, or live-session
+screenshot was retained in the repository.
 
-These do not block completing the public source repository:
+The release-preparation changes after `1a45605` are documentation-only; package
+runtime code is unchanged. The tag workflow must build and smoke-test the exact
+tagged wheel and source archive, and the public artifact must receive a separate
+clean-install verification after publication.
 
-- register the PyPI Trusted Publisher and confirm the project namespace;
-- complete the desktop-mutating Ubuntu 26.04 matrix for scaled and mirrored
-  layouts with reviewed privacy-safe evidence; the baseline above covers the
-  current mixed-orientation and transformed layout, and the generated wallpaper
-  artifact must never be published;
-- replace `Pending` in the v0.1 changelog with the release date;
-- create the protected `v0.1.0` tag only after every release gate passes.
+## Remaining v0.1 publication steps
+
+No source-code or live-platform blocker remains. Before creating the protected
+tag:
+
+- confirm the pending PyPI Trusted Publisher for the `countscape` project and
+  the repository's protected `pypi` environment; and
+- create the protected `v0.1.0` tag only from the reviewed, green release commit.
+
+The tag-triggered workflow must stage and verify the exact GitHub draft, publish
+the same tested files to PyPI through Trusted Publishing, and publish the
+immutable GitHub release. After the workflow completes, a separate clean public
+install must pass verification.
 
 Uploading the reviewed social-preview PNG in GitHub's repository settings is
 optional repository polish. It affects link cards when the repository is shared,

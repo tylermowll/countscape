@@ -7,11 +7,9 @@ uses semantic versioning once releases are published.
 
 No post-v0.1 changes are recorded yet.
 
-## 0.1.0 - Pending
+## 0.1.0 - 2026-08-23
 
-This release is not published until the `v0.1.0` tag, GitHub release, PyPI
-artifact, and live Ubuntu 26.04 evidence all pass the
-[release checklist](docs/release-checklist.md).
+Initial public release for the supported Ubuntu GNOME/Wayland platform.
 
 ### Added
 

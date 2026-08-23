@@ -2,15 +2,15 @@
 
 ## Supported versions
 
-Countscape v0.1.0 publication is pending. Until it is published, security fixes
-target the default branch and no packaged release is a supported security line.
-After publication, this table must be updated as part of every release:
+Published Countscape v0.1 releases are the supported security line. A version
+counts as published only when the exact version appears on both the GitHub
+release page and PyPI. Update this table as part of every later release:
 
 | Version | Supported |
 |---|---|
-| Default branch before v0.1.0 publication | Yes |
-| Published v0.1 line | Pending |
-| Unpublished builds and older lines | No |
+| Published v0.1 line | Yes |
+| Default-branch and other unpublished builds | No |
+| Older release lines | No |
 
 Install only exact versions shown on both the
 [GitHub release page](https://github.com/tylermowll/countscape/releases) and
