@@ -716,7 +716,7 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/releases/375099485" \
             > "${release_metadata}"
           jq -e \
-            --arg body "$(<"${notes}")" \
+            --rawfile body "${notes}" \
             --arg name "Countscape ${RELEASE_TAG}" \
             --arg tag "${RELEASE_TAG}" '
               .id == 375099485
@@ -819,7 +819,7 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/releases/375099485" \
             > "${release_metadata}"
           jq -e \
-            --arg body "$(<"${notes}")" \
+            --rawfile body "${notes}" \
             --arg name "Countscape ${RELEASE_TAG}" \
             --arg tag "${RELEASE_TAG}" '
               .id == 375099485
