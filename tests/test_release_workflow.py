@@ -24,6 +24,7 @@ def test_one_time_recovery_rechecks_mutable_draft_after_approval() -> None:
 
     assert "      contents: write\n      id-token: write\n" in recovery
     assert 'releases/375099485"' in recovery
+    assert '--rawfile body "${notes}"' in recovery
     assert ".draft == true" in recovery
     assert ".immutable == false" in recovery
     assert 'gh release download "${RELEASE_TAG}"' in recovery
