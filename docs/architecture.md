@@ -102,9 +102,11 @@ Default paths honor absolute XDG base-directory overrides and otherwise use:
 `[runtime].state_directory`. Installed commands load that path from the recorded
 config, so the systemd user manager does not re-resolve lifecycle state from an
 ambient `XDG_STATE_HOME`. Unit sources live under the recorded state's `systemd/`
-child and are linked into the user manager. The v0.1 config requires
-`schema_version = 1`; pre-v0.1 preview config and state are intentionally not
-migrated.
+child and are linked into the user manager. Lifecycle manifest schema v2 records
+the persistent systemd user-unit link directory; uninstall validates and uses
+that recorded directory rather than deriving it from later ambient
+`XDG_CONFIG_HOME`. The v0.1 config requires `schema_version = 1`; pre-v0.1
+preview config and state schemas are intentionally not migrated.
 
 The photo, output, cache, runtime-state, and configuration directories must be
 pairwise separate and nonoverlapping. Output, cache, and state must be dedicated
@@ -167,7 +169,10 @@ rerendering.
 ## Photo selection and source ownership
 
 Photo scanning is nonrecursive and accepts `.jpg`, `.jpeg`, and `.png` files.
-Each candidate is opened for verification. Selection builds a deterministic
+Each candidate is opened for verification. Oversized decoded dimensions and
+Pillow decode or decompression-bomb failures are reported as controlled input
+errors. A fixed 50,000,000-pixel source limit is enforced during scanning and
+again immediately before full render decoding. Selection builds a deterministic
 ordering from source filenames and metadata, the pool signature, and the
 machine-local seed, then indexes it with the photo bucket.
 
@@ -209,7 +214,9 @@ copies the base and draws current text on each logical region.
 Images are saved to a same-directory temporary file, flushed, and moved over
 the final name with `os.replace`. GNOME therefore sees either the previous
 complete image or the next complete image. A file lock rejects concurrent
-render or apply operations.
+render or apply operations. It does not coordinate lifecycle changes:
+`install` and `uninstall` must not overlap render/apply or another lifecycle
+invocation and must be retried sequentially.
 
 Final wallpapers use immutable `wallpaper-<24hex>.png` names derived from the
 complete render identity. Calibrations use `calibration-<24hex>.png` names
@@ -255,18 +262,27 @@ The stable private selection seed is also the output/cache ownership identity,
 so rendering, calibration, install, and uninstall use the same marker schema.
 Install separately records a stable installation ID, the exact expected unit
 paths, and hashes of the generated unit contents. It refuses to overwrite
-foreign or edited units.
+foreign or edited units. Regenerating managed integration snapshots its prior
+unit generation and manifest. If publication of the complete digest-consistent
+trio fails, it restores the exact prior bytes. A later systemd failure leaves the
+complete new generation in place so the same command can be retried.
 
 Uninstall validates the manifest, unit ownership, absolute directory paths,
 marker application, ownership identity, and directory kind before stopping
-integration. It requires timer disable and service stop to succeed. GNOME
-restoration must then reach a resolved state; otherwise removal stops and asks
-the user to choose another wallpaper before retrying.
+integration. It checks the manager's loaded names and drop-ins and scans the
+effective user-unit roots reported by systemd, rejecting external Countscape
+units, aliases, and drop-ins. It then stops the managed timer and service,
+removes only the exact user-manager links whose paths and targets were
+validated, reloads the manager, and verifies that both managed unit names are
+absent. GNOME restoration must then reach a resolved state; otherwise removal
+stops and asks the user to choose another wallpaper before retrying.
 
 After resolution, cleanup rereads GNOME and never deletes a currently referenced
 path. It removes only recognized unit, state, cache, calibration, render
 metadata, lock, and content-addressed wallpaper names—not an entire directory.
-Configuration and source photos are preserved.
+Configuration and source photos are preserved. Ownership markers and the
+installation manifest remain available until destructive systemd cleanup
+succeeds, keeping an interrupted uninstall safely retryable.
 
 ## Platform boundary
 

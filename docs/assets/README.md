@@ -13,3 +13,8 @@ tagline and prohibited people, avatars, usernames, real photographs, personal
 details, dates, paths, third-party logos, and watermarks. The result was reviewed
 visually, resized to GitHub's 1280 x 640 recommendation, and saved as optimized,
 metadata-stripped PNG. Its photo cards contain only synthetic landscape art.
+
+Maintainers may upload this file through the repository's GitHub social-preview
+setting to control the card shown when a repository link is shared. That upload
+is optional repository polish, not a functional, packaging, privacy, security,
+or v0.1 publication gate.

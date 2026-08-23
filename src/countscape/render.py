@@ -21,6 +21,7 @@ from countscape.errors import CountdownError, StateError
 from countscape.models import CanvasLayout, CanvasRegion, DisplayLayout
 from countscape.photos import (
     PhotoPool,
+    open_source_image,
     photo_bucket,
     scan_photo_pool,
     select_photo,
@@ -93,35 +94,35 @@ def _fit_photo(
     fit: str,
 ) -> Image.Image:
     width, height = size
-    with Image.open(path) as source:
+    with open_source_image(path) as source:
         oriented = ImageOps.exif_transpose(source)
         rgba = oriented.convert("RGBA")
-        if fit == "contain":
-            fitted = ImageOps.contain(
-                rgba,
-                size,
-                method=Image.Resampling.LANCZOS,
-            )
-        elif fit == "cover":
-            fitted = ImageOps.fit(
-                rgba,
-                size,
-                method=Image.Resampling.LANCZOS,
-                centering=(0.5, 0.5),
-            )
-        else:
-            raise CountdownError(f"unsupported photo fit: {fit}")
-        photo = Image.new("RGBA", fitted.size, (20, 20, 20, 255))
-        photo.alpha_composite(fitted)
-        background = Image.new("RGB", size, (0, 0, 0))
-        background.paste(
-            photo.convert("RGB"),
-            (
-                (width - fitted.width) // 2,
-                (height - fitted.height) // 2,
-            ),
+    if fit == "contain":
+        fitted = ImageOps.contain(
+            rgba,
+            size,
+            method=Image.Resampling.LANCZOS,
         )
-        return background
+    elif fit == "cover":
+        fitted = ImageOps.fit(
+            rgba,
+            size,
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+    else:
+        raise CountdownError(f"unsupported photo fit: {fit}")
+    photo = Image.new("RGBA", fitted.size, (20, 20, 20, 255))
+    photo.alpha_composite(fitted)
+    background = Image.new("RGB", size, (0, 0, 0))
+    background.paste(
+        photo.convert("RGB"),
+        (
+            (width - fitted.width) // 2,
+            (height - fitted.height) // 2,
+        ),
+    )
+    return background
 
 
 def _wrap_text(

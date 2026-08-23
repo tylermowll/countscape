@@ -117,6 +117,10 @@ Photo, output, cache, runtime-state, and configuration directories must be
 pairwise separate and nonoverlapping. Output, cache, and state must be dedicated
 subdirectories, not the filesystem root or home directory.
 `max_canvas_pixels` is an allocation guard and cannot exceed 100,000,000.
+It limits the generated composite canvas, not source-photo decoding. Countscape
+also enforces a fixed, nonconfigurable 50,000,000-pixel ceiling on each source
+image before full decode. This accepts common 48-megapixel and 8K inputs while
+bounding a single RGBA expansion to about 191 MiB before decoder overhead.
 
 Change only the photo directory through the current CLI:
 

@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import warnings
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from conftest import make_image
+from PIL import Image
 
+import countscape.photos as photos
 from countscape.errors import PhotoError
-from countscape.photos import photo_bucket, scan_photo_pool, select_photo
+from countscape.photos import (
+    MAX_SOURCE_IMAGE_PIXELS,
+    photo_bucket,
+    scan_photo_pool,
+    select_photo,
+)
 
 
 def test_missing_empty_and_invalid_pools(tmp_path: Path) -> None:
@@ -40,6 +48,47 @@ def test_portrait_landscape_and_transparent_images_are_accepted(
         for path in root.iterdir()
     }
     assert after == before
+
+
+def test_source_pixel_limit_rejects_photo_without_modifying_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = make_image(tmp_path / "photos" / "large.png", size=(11, 10))
+    before = (source.read_bytes(), source.stat().st_mtime_ns)
+    monkeypatch.setattr(photos, "MAX_SOURCE_IMAGE_PIXELS", 100)
+
+    with pytest.raises(PhotoError, match=r"100-pixel limit.*large\.png \(11x10\)"):
+        scan_photo_pool(source.parent)
+
+    assert (source.read_bytes(), source.stat().st_mtime_ns) == before
+
+
+@pytest.mark.parametrize("failure", ("error", "warning"))
+def test_pillow_decompression_bomb_is_a_controlled_photo_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    source = make_image(tmp_path / "photos" / "bomb.png", size=(10, 10))
+
+    def raise_bomb(_path: Path) -> Image.Image:
+        if failure == "error":
+            raise Image.DecompressionBombError("simulated decompression bomb")
+        warnings.warn(
+            "simulated decompression bomb",
+            Image.DecompressionBombWarning,
+            stacklevel=2,
+        )
+        raise AssertionError("the guarded warning must be promoted to an exception")
+
+    monkeypatch.setattr(Image, "open", raise_bomb)
+
+    with pytest.raises(
+        PhotoError,
+        match=rf"{MAX_SOURCE_IMAGE_PIXELS:,}-pixel limit: bomb\.png",
+    ):
+        scan_photo_pool(source.parent)
 
 
 def test_selection_is_stable_independent_and_never_repeats(tmp_path: Path) -> None:

@@ -69,6 +69,9 @@ Use `countscape configure --target ... --timezone ...` to update both together.
   into a public issue without redaction.
 - Remove or repair images that normal image verification cannot open. Countscape
   leaves every source file untouched.
+- Resize or remove a source image that exceeds Countscape's fixed safety limit
+  of 50,000,000 decoded pixels. This source guard is separate from the configured
+  output-canvas limit; Countscape leaves the rejected file untouched.
 
 ## A host command is missing
 
@@ -130,6 +133,10 @@ graphical session, invalid display response, missing font, or a changed managed
 directory marker. Correct the underlying error and run `countscape apply`; rerun
 `countscape install` when the config path, schedule, package, or XDG roots changed.
 
+Image decode and decompression-bomb failures are reported as controlled source
+input errors. Remove or repair the named local image, then retry; Countscape does
+not rewrite it.
+
 ## Nothing changed after a timer run
 
 That can be correct. Countdown and photo selection use independent timestamp
@@ -140,8 +147,11 @@ GNOME URI.
 ## Another operation is already running
 
 Countscape serializes render and apply operations. Wait for the current oneshot
-service invocation to finish, then retry. If the message persists, inspect the
-user-service status and journal rather than deleting the lock or state files.
+service invocation to finish, then retry. That lock does not coordinate
+lifecycle changes: do not overlap `install` or `uninstall` with render/apply, a
+timer-started service run, or another lifecycle invocation. Retry sequentially.
+If the message persists, inspect the user-service status and journal rather than
+deleting the lock or state files.
 
 ## Uninstall stops before cleanup
 

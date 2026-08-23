@@ -8,8 +8,10 @@ import pytest
 from conftest import make_image, write_config
 from PIL import Image, ImageChops
 
+import countscape.photos as photos_module
+import countscape.render as render_module
 from countscape.config import AppConfig, load_config
-from countscape.errors import CountdownError, StateError
+from countscape.errors import CountdownError, PhotoError, StateError
 from countscape.models import (
     DisplayLayout,
     LogicalMonitor,
@@ -503,6 +505,58 @@ def test_corrupt_cache_is_rebuilt(configured_project: tuple[AppConfig, Path]) ->
     render_wallpaper(config, layout, now=now + timedelta(minutes=1))
     with Image.open(base) as image:
         assert image.size == (800, 600)
+
+
+def test_source_size_is_revalidated_after_pool_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = make_image(tmp_path / "photos" / "photo.jpg", size=(10, 10))
+    config = load_config(write_config(tmp_path))
+    original_scan = render_module.scan_photo_pool
+    monkeypatch.setattr(photos_module, "MAX_SOURCE_IMAGE_PIXELS", 100)
+
+    def scan_then_grow(root: Path):
+        pool = original_scan(root)
+        make_image(source, size=(11, 10))
+        return pool
+
+    monkeypatch.setattr(render_module, "scan_photo_pool", scan_then_grow)
+
+    with pytest.raises(PhotoError, match=r"100-pixel limit.*photo\.jpg \(11x10\)"):
+        render_wallpaper(
+            config,
+            discover_layout(config.display),
+            now=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+        )
+
+    with Image.open(source) as changed:
+        assert changed.size == (11, 10)
+
+
+def test_pillow_decode_failure_is_a_controlled_photo_error(
+    configured_project: tuple[AppConfig, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, source = configured_project
+    before = (source.read_bytes(), source.stat().st_mtime_ns)
+
+    def fail_decode(_source: Image.Image) -> Image.Image:
+        raise OSError("image file is truncated")
+
+    monkeypatch.setattr(render_module.ImageOps, "exif_transpose", fail_decode)
+
+    with pytest.raises(
+        PhotoError,
+        match=r"unreadable image: photo\.jpg: image file is truncated",
+    ):
+        render_wallpaper(
+            config,
+            discover_layout(config.display),
+            now=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+        )
+
+    assert (source.read_bytes(), source.stat().st_mtime_ns) == before
 
 
 def test_pre_release_render_state_schema_is_rejected(

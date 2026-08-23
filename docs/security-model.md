@@ -62,15 +62,23 @@ seed. Cleanup uses allowlisted filenames and refuses a mismatched marker.
   linked into the systemd user manager.
 - The service loads the recorded runtime state path from config rather than
   deriving lifecycle state from ambient systemd XDG variables.
+- Lifecycle manifest schema v2 records the persistent systemd user-unit link
+  directory; uninstall validates and uses it instead of later ambient
+  `XDG_CONFIG_HOME`.
+- Manager names, drop-ins, and every effective systemd user-unit root are
+  checked before lifecycle mutation; external Countscape topology is refused.
 - Foreign or user-edited units are not silently replaced or removed.
 
 ## Input and rendering safety
 
 Countscape treats config, image files, Mutter responses, and persisted state as
 fallible input. It validates aware timestamps, bounded text, storage separation,
-image readability, display geometry, canvas allocation, state shape, paths,
-ownership markers, generated filenames, and unit digests. Output and state are
-replaced atomically, and render/apply operations are serialized.
+image readability and decoded dimensions, display geometry, canvas allocation,
+state shape, paths, ownership markers, generated filenames, and unit digests.
+Each source image has a fixed 50,000,000-pixel ceiling, checked during scanning
+and again before full render decoding. Pillow decode and decompression-bomb
+failures become controlled input errors. Output and state are replaced
+atomically, and render/apply operations are serialized.
 
 Pillow and the host desktop stack still process local files and system responses.
 Keep dependencies current, use only photos you trust, and report unexpected file

@@ -64,13 +64,15 @@ uv run python tools/privacy_check.py \
 - [ ] Time tests cover daylight-saving changes, backward corrections, and
   suspend-like jumps.
 - [ ] Photo/render tests cover missing, empty, invalid, portrait, landscape,
-  transparent, and long-text inputs.
+  transparent, oversized decoded sources, Pillow decoding failures, and long-text
+  inputs.
 - [ ] Display tests cover single, mixed orientation, scaling, transforms, and
   mirroring.
 - [ ] Schedule tests cover independent boundaries, unchanged reuse, and exact
   wall-clock timer generation.
 - [ ] Installation tests cover update, exact-version rollback, unit ownership,
-  GNOME restoration, and safe uninstall refusal.
+  GNOME restoration, safe uninstall refusal, regeneration rollback, and
+  retryability after injected destructive-phase failures.
 - [ ] Config tests require `schema_version = 1`, reject pre-v0.1 preview config,
   and validate a distinct recorded runtime-state directory.
 - [ ] Lifecycle tests prove the generated service loads the config-recorded state

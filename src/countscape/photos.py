@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from countscape.errors import PhotoError
 
 SUPPORTED_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
+# This accepts 8K and common 48 MP photos while limiting one RGBA expansion to
+# about 191 MiB before decoder and resampling overhead. It is intentionally not
+# configurable so every source-photo entry point has the same safety boundary.
+MAX_SOURCE_IMAGE_PIXELS = 50_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +24,38 @@ class PhotoPool:
     root: Path
     photos: tuple[Path, ...]
     signature: str
+
+
+def _source_limit_error(path: Path, *, size: tuple[int, int] | None = None) -> str:
+    detail = f" ({size[0]}x{size[1]})" if size is not None else ""
+    return (
+        f"source image exceeds the {MAX_SOURCE_IMAGE_PIXELS:,}-pixel limit: "
+        f"{path.name}{detail}"
+    )
+
+
+@contextmanager
+def open_source_image(path: Path) -> Iterator[Image.Image]:
+    """Open a source photo behind Countscape's fixed decode-safety boundary."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(path) as image:
+                width, height = image.size
+                if width <= 0 or height <= 0:
+                    raise PhotoError(
+                        f"unreadable image: {path.name}: invalid image dimensions"
+                    )
+                if width * height > MAX_SOURCE_IMAGE_PIXELS:
+                    raise PhotoError(_source_limit_error(path, size=(width, height)))
+                yield image
+    except PhotoError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
+        raise PhotoError(_source_limit_error(path)) from error
+    except (EOFError, OSError, SyntaxError, ValueError) as error:
+        detail = str(error) or type(error).__name__
+        raise PhotoError(f"unreadable image: {path.name}: {detail}") from error
 
 
 def scan_photo_pool(root: Path) -> PhotoPool:
@@ -40,11 +79,8 @@ def scan_photo_pool(root: Path) -> PhotoPool:
 
     digest = sha256()
     for path in candidates:
-        try:
-            with Image.open(path) as image:
-                image.verify()
-        except (OSError, UnidentifiedImageError) as error:
-            raise PhotoError(f"unreadable image: {path.name}: {error}") from error
+        with open_source_image(path) as image:
+            image.verify()
         stat = path.stat()
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(b"\0")
