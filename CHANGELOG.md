@@ -5,7 +5,7 @@ uses semantic versioning once releases are published.
 
 ## Unreleased
 
-No post-v0.1 changes are recorded yet.
+No post-v0.1 user-visible changes are recorded yet.
 
 ## 0.1.0 - 2026-08-23
 
