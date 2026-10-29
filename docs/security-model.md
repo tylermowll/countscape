@@ -22,7 +22,7 @@ corruption defenses, not isolation from an equally privileged process.
 The following are private even though not all are secret credentials:
 
 - source photos and their filenames or metadata;
-- event labels, targets, timezones, and completion messages;
+- overlay messages, event labels, targets, timezones, and completion messages;
 - configuration and absolute filesystem paths;
 - generated wallpapers and screenshots;
 - display identifiers and machine layout details;
@@ -31,6 +31,22 @@ The following are private even though not all are secret credentials:
 
 None belongs in the public repository, release artifacts, wiki, or public issue
 attachments. Synthetic examples must not copy a real event or machine layout.
+
+## Public privacy verification
+
+The [2026-10-29 public privacy audit](audits/2026-10-29-public-privacy.md) found
+no leaked secrets or private personal data in the checked repository history,
+retained pull-request refs, published distributions, discussions, and sampled
+workflow logs. It also records the distinction between intentional public
+attribution and private data, the checks performed, and their limits.
+
+`tools/privacy_check.py` checks the worktree and, when requested, the staged
+index, locally reachable Git objects, and supplied release archives. Its
+patterns cover selected secret formats, personal email addresses, absolute
+user-home paths, and disallowed media or build artifacts. A pass does not
+automatically inspect GitHub discussions, logs, unfetched remote refs, or every
+possible form of personal data or credential. Review those surfaces separately
+when assessing public exposure.
 
 ## Ownership boundaries
 

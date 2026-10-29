@@ -153,7 +153,10 @@ changing versions.
 
 Before enabling date mode, keep a private backup of a compatible countdown
 configuration. Version 0.2.0 rejects the new `[overlay]` table; restore that backup
-before rolling back. Keep the backup outside this repository.
+before rolling back. Stop the managed timer and wait for its service to finish
+before restoring config or replacing the package, as described in
+[Lifecycle](https://github.com/tylermowll/countscape/blob/main/docs/lifecycle.md#roll-back).
+Keep the backup outside this repository.
 
 ```bash
 # Upgrade to an exact published version; replace X.Y.Z.
@@ -209,6 +212,11 @@ runtime state. Also review configuration, generated wallpapers, logs, and
 screenshots: they can reveal event details, photo content, usernames, paths,
 monitor data, or other machine information.
 
+The [2026-10-29 public privacy audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/2026-10-29-public-privacy.md)
+found no leaked secrets or private personal data in the checked GitHub history,
+discussions, sampled workflow logs, or published GitHub/PyPI packages. It records
+the checked scope, public attribution, and limits of that finding.
+
 ## Documentation
 
 | Guide | Purpose |
@@ -220,6 +228,7 @@ monitor data, or other machine information.
 | [Security model](https://github.com/tylermowll/countscape/blob/main/docs/security-model.md) | Trust boundaries and local-data handling |
 | [Architecture](https://github.com/tylermowll/countscape/blob/main/docs/architecture.md) | Current implementation and data flow |
 | [Release checklist](https://github.com/tylermowll/countscape/blob/main/docs/release-checklist.md) | Artifact gates and live Ubuntu evidence |
+| [v0.3.0 release audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/v0.3.0-release.md) | Current publication and date-mode live baseline |
 | [Release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md) | Historical v0.1 platform evidence |
 | [Community Wiki](https://github.com/tylermowll/countscape/wiki) | Privacy-safe FAQ, recipes, and community troubleshooting |
 | [Support](https://github.com/tylermowll/countscape/blob/main/SUPPORT.md) | Supported scope and how to ask for help |

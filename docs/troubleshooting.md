@@ -15,9 +15,9 @@ journalctl --user-unit countscape.service
 
 Default `countscape doctor` and `countscape status` output is redacted; JSON also
 includes a privacy marker. Review either before sharing. Never publish either
-command's `--include-private` output: private doctor output adds event, path,
-font, photo, and display details, while private status output exposes raw timer
-and render state.
+command's `--include-private` output: private doctor output adds overlay message,
+date timezone, event, path, font, photo, and display details, while private status
+output exposes raw timer and render state.
 
 ## Configuration does not exist
 
@@ -103,7 +103,7 @@ raw connector names or a complete monitor dump without reviewing it.
    Settings.
 4. Try `countscape configure --photo-fit contain` to distinguish cropping from a
    layout issue.
-5. Run `countscape apply` afterward to restore the countdown wallpaper.
+5. Run `countscape apply` afterward to restore the configured wallpaper.
 
 ## The timer is inactive
 
@@ -143,6 +143,10 @@ That can be correct. Countdown and photo selection use independent timestamp
 buckets. When visible text, selected photo, pool, layout, event, and style are
 unchanged, Countscape reuses the complete output and avoids rewriting the same
 GNOME URI.
+
+In date mode, the date is evaluated in the configured IANA timezone. Repeated
+wakes on the same local date can reuse the overlay while photos keep rotating
+on their separate schedule.
 
 ## Another operation is already running
 
@@ -185,7 +189,8 @@ Do not move ownership markers or integration state between roots by hand.
 Review every line and attachment. Replace or remove:
 
 - usernames, home paths, hostnames, and custom XDG paths;
-- event labels, targets, timezones, and completion messages;
+- overlay messages, date timezones, event labels, targets, timezones, and
+  completion messages;
 - photo filenames, signatures, contents, and generated wallpapers;
 - monitor serials, connector identifiers, and distinctive layout details;
 - journal lines unrelated to Countscape;

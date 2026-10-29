@@ -5,7 +5,11 @@ uses semantic versioning once releases are published.
 
 ## Unreleased
 
-No unreleased changes are recorded yet.
+### Changed
+
+- Refresh v0.3 support and wiki evidence, date-mode guidance, rollback ordering,
+  and the contributor wheel-install example. Record the scoped public privacy
+  audit for GitHub and PyPI.
 
 ## 0.3.0 - 2026-10-29
 

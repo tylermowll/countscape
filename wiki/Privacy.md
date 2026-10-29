@@ -6,7 +6,8 @@ personal information. Review everything before posting to issues or the wiki.
 ## Never publish
 
 - source photos or generated wallpapers made from them;
-- real event labels, targets, timezones, or completion messages;
+- custom overlay messages, date timezones, or real event labels, targets,
+  timezones, or completion messages;
 - complete config or state files;
 - selection seeds, ownership IDs, installation IDs, or manifests;
 - usernames, home paths, hostnames, or custom XDG locations;
@@ -22,7 +23,7 @@ personal information. Review everything before posting to issues or the wiki.
 - `~/<redacted>` or `<path>` for paths;
 - `EXAMPLE-1` for a connector;
 - generated geometric placeholder images;
-- an invented future event with generic text;
+- generic overlay text and an invented future event when a countdown is needed;
 - broad layout descriptions such as “two displays, one portrait”; and
 - the smallest relevant, manually reviewed journal excerpt.
 

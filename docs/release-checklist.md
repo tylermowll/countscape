@@ -10,8 +10,7 @@ dated release audits. Retain candidate-specific results for each publication.
 
 ## 1. Define the release
 
-- [ ] Choose the exact version and intended tag, currently `0.3.0` and
-  `v0.3.0`.
+- [ ] Choose the exact version `X.Y.Z` and matching intended tag `vX.Y.Z`.
 - [ ] Confirm package and runtime version metadata agree.
 - [ ] Move user-visible changes from `Unreleased` into the release section of
   [CHANGELOG.md](../CHANGELOG.md).
@@ -56,6 +55,8 @@ uv run python tools/privacy_check.py \
   user path, secret, or editor state appears in either artifact.
 - [ ] Tracked files, screenshots, fixtures, metadata, all reachable refs, and Git
   objects are reviewed for private data.
+- [ ] Record the refs actually checked. `--history` scans local refs; include
+  retained public pull-request refs separately when reviewing public history.
 - [ ] Documentation links resolve and the synthetic hero and social-preview card
   have provenance, no embedded personal metadata, and appropriate accessible
   text where rendered in repository content.
@@ -100,7 +101,7 @@ publish only a redacted summary:
 
 ```text
 Countscape live validation
-Release candidate: 0.3.0 / <commit>
+Release candidate: <version> / <commit>
 Date (UTC): YYYY-MM-DD
 Tester reference: <non-personal identifier>
 
