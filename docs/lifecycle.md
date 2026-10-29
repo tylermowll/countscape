@@ -46,12 +46,16 @@ Read the target release notes first, then replace `X.Y.Z` with a published
 version:
 
 ```bash
-uv tool upgrade --python 3.15.2 "countscape==X.Y.Z"
+uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
 countscape --version
 countscape doctor
 countscape install
 countscape status
 ```
+
+An exact-version tool install records its pin in uv's receipt. `uv tool upgrade`
+retains that requirement and can conflict with a different requested version.
+The forced install replaces the stored pin and persistent tool environment.
 
 The final `countscape install` is required even when the tool executable path
 appears unchanged. It preflights the new package and regenerates the unit content

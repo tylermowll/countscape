@@ -126,9 +126,13 @@ Always name the version you intend to run. After any package upgrade, downgrade,
 or reinstall, regenerate the systemd integration so it records the current tool
 environment.
 
+An exact-version tool install records its pin in uv's receipt. `uv tool upgrade`
+retains that requirement, so use a forced tool install to replace the pin when
+changing versions.
+
 ```bash
 # Upgrade to an exact published version; replace X.Y.Z.
-uv tool upgrade --python 3.15.2 "countscape==X.Y.Z"
+uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
 countscape --version
 countscape doctor
 countscape install
