@@ -12,6 +12,7 @@ from typing import Any
 from countscape import installed_version
 from countscape.config import CONFIG_SCHEMA_VERSION, default_config_path, load_config
 from countscape.countdown import calculate_countdown
+from countscape.date_display import current_date_state
 from countscape.display import build_canvas_layout
 from countscape.errors import ConfigError, CountdownError
 from countscape.gnome import apply_wallpaper, protected_output_paths
@@ -46,7 +47,7 @@ def _config_argument(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="countscape",
-        description="Turn a photo collection into a live countdown wallpaper.",
+        description="Turn photos into a countdown or current-date wallpaper.",
     )
     parser.add_argument(
         "--version",
@@ -58,10 +59,20 @@ def build_parser() -> argparse.ArgumentParser:
     init = subparsers.add_parser("init", help="create a personal configuration")
     _config_argument(init)
     init.add_argument(
+        "--mode",
+        choices=("countdown", "date"),
+        default="countdown",
+        help="show a countdown or the current date with a message",
+    )
+    init.add_argument("--message", help="message to show with the current date")
+    init.add_argument(
         "--target",
         help="event time as ISO 8601 with an explicit UTC offset",
     )
-    init.add_argument("--timezone", help="event IANA zone, such as Europe/London")
+    init.add_argument(
+        "--timezone",
+        help="IANA zone for the event or current date, such as Europe/London",
+    )
     init.add_argument("--label", default="Until the big day")
     init.add_argument("--after-message", default="It's here!")
     init.add_argument("--photos", type=Path, help="directory containing your photos")
@@ -83,7 +94,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-private",
         action="store_true",
         help=(
-            "include event, path, font, and display identifiers; review before sharing"
+            "include event, message, timezone, path, font, and display details; "
+            "review before sharing"
         ),
     )
 
@@ -110,9 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     configure = subparsers.add_parser(
-        "configure", help="update countdown and presentation settings"
+        "configure", help="update countdown, date, and presentation settings"
     )
     _config_argument(configure)
+    configure.add_argument("--mode", choices=("countdown", "date"))
+    configure.add_argument("--message", help="message to show with the current date")
     configure.add_argument("--overlay-position", choices=("center", "bottom"))
     configure.add_argument("--photo-fit", choices=("contain", "cover"))
     configure.add_argument("--photos", type=Path)
@@ -177,18 +191,29 @@ def doctor_report(
             "ok": True,
             "schema_version": CONFIG_SCHEMA_VERSION,
         }
+        report["mode"] = config.overlay.mode
         if include_private:
             report["checks"]["config"]["path"] = str(config.path)
-            report["event"] = {
-                "label": config.event.label,
-                "target": config.event.target.isoformat(),
-                "timezone": config.event.timezone.key,
-                "state": calculate_countdown(
-                    datetime.now().astimezone(),
-                    config.event.target,
-                    config.event.after_arrival_message,
-                ).text,
+            report["overlay"] = {
+                "mode": config.overlay.mode,
+                "message": config.overlay.message,
+                "timezone": (
+                    config.overlay.timezone.key
+                    if config.overlay.timezone is not None
+                    else None
+                ),
             }
+            if config.event is not None:
+                report["event"] = {
+                    "label": config.event.label,
+                    "target": config.event.target.isoformat(),
+                    "timezone": config.event.timezone.key,
+                    "state": calculate_countdown(
+                        datetime.now().astimezone(),
+                        config.event.target,
+                        config.event.after_arrival_message,
+                    ).text,
+                }
             report["paths"] = {
                 "photos": str(config.wallpaper.source_directory),
                 "output": str(config.wallpaper.output_directory),
@@ -208,7 +233,16 @@ def doctor_report(
         except CountdownError as error:
             failed("photos", error)
         try:
-            font = resolve_font(config.style.font)
+            if config.overlay.mode == "date" and config.overlay.timezone is not None:
+                date = current_date_state(
+                    datetime.now().astimezone(), config.overlay.timezone
+                )
+                font = resolve_font(
+                    config.style.font,
+                    text=f"{config.overlay.message} {date.text}",
+                )
+            else:
+                font = resolve_font(config.style.font)
             report["checks"]["font"] = {"ok": True}
             if include_private:
                 report["checks"]["font"]["path"] = str(font)
@@ -334,11 +368,18 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "init":
-            target = _prompt(args.target, "Target (ISO 8601 with UTC offset): ")
+            if args.mode == "date":
+                target = args.target
+                message = _prompt(args.message, "Message to show with the date: ")
+            else:
+                target = _prompt(args.target, "Target (ISO 8601 with UTC offset): ")
+                message = args.message
             timezone = _prompt(args.timezone, "IANA timezone: ")
             path = initialize_config(
                 target=target,
                 timezone=timezone,
+                mode=args.mode,
+                message=message,
                 label=args.label,
                 after_arrival_message=args.after_message,
                 source_directory=args.photos,
@@ -355,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "doctor":
             if args.include_private:
                 print(
-                    "WARNING: private diagnostics include event details, "
+                    "WARNING: private diagnostics include event and overlay details, "
                     "absolute paths, "
                     "font paths, and display identifiers. Review before sharing.",
                     file=sys.stderr,
@@ -450,6 +491,8 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 configure_settings(
                     args.config,
+                    mode=args.mode,
+                    message=args.message,
                     overlay_position=args.overlay_position,
                     photo_fit=args.photo_fit,
                     source_directory=args.photos,

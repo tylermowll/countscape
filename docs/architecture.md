@@ -8,27 +8,30 @@ For user-facing behavior, see [Installation](install.md),
 
 ## Product boundary
 
-Countscape is an offline photo countdown wallpaper for Ubuntu GNOME/Wayland.
-The core owns configuration validation, countdown math, photo selection,
-display normalization, and rendering. Small adapters own Mutter discovery,
-GNOME settings, and systemd user integration.
+Countscape is an offline photo wallpaper with a countdown or current date and
+message for Ubuntu GNOME/Wayland. The core owns configuration validation,
+countdown math, local-date formatting, photo selection, display normalization,
+and rendering. Small adapters own Mutter discovery, GNOME settings, and systemd
+user integration.
 
-The v0.1 scope does not aim to support other desktop environments, fetch or sync
+The product scope does not aim to support other desktop environments, fetch or sync
 photos, track events over the network, or provide a general text-template
 language.
 
 ## Components
 
-1. **Configuration** loads versioned XDG-backed TOML and validates an aware event
-   target, its IANA timezone, a recorded runtime-state directory,
+1. **Configuration** loads versioned XDG-backed TOML and validates either an
+   aware countdown target with its IANA timezone or a date-mode message and
+   IANA timezone. Both modes validate a recorded runtime-state directory,
    nonoverlapping storage paths, display profiles, independent schedules, a
    selection seed, and rendering style.
 2. **Initialization and configuration** create private configuration, a stable
    random seed, and the selected photo directory; supported settings are
    rewritten atomically.
-3. **Countdown** subtracts aware instants in UTC, rounds positive partial
-   minutes up, and switches to the configured completion message at the target
-   boundary.
+3. **Overlay text** either subtracts aware countdown instants in UTC, rounding
+   positive partial minutes up and switching to a completion message at the
+   target, or formats the actual current instant's calendar date in the chosen
+   IANA zone with the date-mode message.
 4. **Photo pool** verifies direct-child JPG, JPEG, and PNG inputs without
    modifying them. A pool signature, stable seed, and independent time bucket
    determine the selected photo.
@@ -53,7 +56,9 @@ language.
 ## Data flow
 
 ```text
-aware target + current aware instant ──> countdown bucket and text
+countdown mode: aware target + current aware instant ──> countdown text
+
+date mode: current aware instant + IANA zone + message ──> local date and text
 
 photo directory + stable seed + independent bucket ──> selected photo
 
@@ -79,13 +84,15 @@ profile ──────┘                              │
 
 ## Configuration and storage
 
-`countscape init` requires an ISO 8601 target with an explicit UTC offset and a
-matching IANA timezone. It writes `event.confirmed = true`, generates a random
-machine-local selection seed, and creates the photo directory. Existing config
-is not overwritten without `--force`. A forced rewrite preserves the selection
-seed when the existing configuration can be loaded, keeping managed-directory
-ownership stable. Forced initialization refuses to replace config while managed
-integration is active; uninstall must complete first.
+The default `countscape init` countdown mode requires an ISO 8601 target with an
+explicit UTC offset and a matching IANA timezone, then writes
+`event.confirmed = true`. `countscape init --mode date` requires a message and
+IANA timezone without creating a fabricated event target. Both modes generate
+a random machine-local selection seed and create the photo directory. Existing
+config is not overwritten without `--force`. A forced rewrite preserves the
+selection seed when the existing configuration can be loaded, keeping managed
+directory ownership stable. Forced initialization refuses to replace config
+while managed integration is active; uninstall must complete first.
 
 Default paths honor absolute XDG base-directory overrides and otherwise use:
 
@@ -105,8 +112,12 @@ ambient `XDG_STATE_HOME`. Unit sources live under the recorded state's `systemd/
 child and are linked into the user manager. Lifecycle manifest schema v2 records
 the persistent systemd user-unit link directory; uninstall validates and uses
 that recorded directory rather than deriving it from later ambient
-`XDG_CONFIG_HOME`. The v0.1 config requires `schema_version = 1`; pre-v0.1
-preview config and state schemas are intentionally not migrated.
+`XDG_CONFIG_HOME`. Configuration requires `schema_version = 1`; pre-v0.1 preview
+config and state schemas are intentionally not migrated. The optional v0.3
+`[overlay]` table defaults to countdown behavior when absent. Date-only configs
+omit `[event]`; a retained event remains validated and can be resumed later.
+Older v0.2 code rejects `[overlay]`, so rollback requires a compatible private
+config backup as described in [Lifecycle](lifecycle.md).
 
 The photo, output, cache, runtime-state, and configuration directories must be
 pairwise separate and nonoverlapping. Output, cache, and state must be dedicated
@@ -120,19 +131,27 @@ It documents the schema but cannot silently install a sample target.
 
 ## Time correctness
 
-Configuration requires `event.target` to contain an explicit UTC offset and
-requires the named IANA zone to produce the same wall time and offset. Runtime
-math converts the target and current time to UTC before subtraction. This
-avoids wall-clock subtraction errors across daylight-saving transitions.
+Countdown configuration requires `event.target` to contain an explicit UTC
+offset and requires the named IANA zone to produce the same wall time and
+offset. Runtime math converts the target and current time to UTC before
+subtraction. This avoids wall-clock subtraction errors across daylight-saving
+transitions.
 
 Positive partial minutes round up, so the display does not show completion
 early. At or after the target, the configured completion message replaces the
 countdown. The value is recalculated from the current instant on every run;
 there is no decrementing cached counter.
 
-Labels and completion messages are trimmed, bounded to 160 characters, and
-reject control characters. The renderer wraps both fields and reduces font
-size until the overlay fits or reports a controlled failure.
+Date mode converts the actual aware current instant to `overlay.timezone` and
+uses its calendar date. It formats weekday, month, day, and year without a
+countdown target. It does not derive the date from a UTC bucket start or assume
+that local calendar days are 86,400 seconds long. The next configured wake after
+local midnight observes the new date, including across daylight-saving changes,
+clock corrections, or a missed run.
+
+Labels, completion messages, and date-mode messages are trimmed, bounded to 160
+characters, and reject control characters. The renderer wraps both overlay
+lines and reduces font size until they fit or reports a controlled failure.
 
 ## Independent scheduling
 
@@ -142,12 +161,20 @@ of at least 60 seconds must be whole minutes; a sub-minute value must evenly
 divide 60. These constraints allow the installed schedule to stay aligned with
 the wall clock.
 
+Date mode uses `countdown_refresh_seconds` as its overlay refresh cadence. It
+checks the current local date on each run while retaining the independent photo
+selection bucket.
+
 The renderer derives both buckets directly from the current aware timestamp. A
 countdown boundary therefore does not rotate a photo early, and a photo
 boundary can trigger a render without changing the countdown bucket. Before
 arrival, countdown text is calculated from the start of its bucket so it stays
 stable for the configured interval. At any run on or after the target, the
 completion state overrides that bucket immediately.
+
+Date-mode text uses the actual current instant rather than the rounded
+countdown bucket start. A date refresh does not itself select a new photo, and
+a photo rotation does not change the date displayed for that local day.
 
 The generated systemd timer uses `OnActiveSec=1s` for one run after activation,
 then `OnCalendar` for persistent wall-clock scheduling. When the greatest common
@@ -158,12 +185,13 @@ the calendar trigger uses the exact greatest-common-divisor second cadence.
 resumes. Changing a schedule requires reinstalling the user integration so this
 trigger is regenerated.
 
-Scheduling and rendering are separate decisions. Each invocation computes a
-render identity from bucket-derived visible countdown text and arrival state,
-the selected photo and photo-pool signature, display signature, canvas, event,
+Scheduling and rendering are separate decisions. Countdown identity includes
+bucket-derived visible text, arrival state, and the event. Date-mode identity
+includes the mode, displayed local date and text, IANA zone, and message. Both
+include the selected photo and photo-pool signature, display signature, canvas,
 and style. Raw bucket numbers are not part of that identity, so a boundary that
-does not change the visible selection can remain a true no-op. If the identity
-and its output file still match, the existing complete PNG is returned without
+does not change visible content can remain a true no-op. If the identity and its
+output file still match, the existing complete PNG is returned without
 rerendering.
 
 ## Photo selection and source ownership
@@ -210,6 +238,10 @@ The photo-only cache is invalidated by the display signature, pool signature,
 selected photo, canvas dimensions, and fit mode. A later photo bucket that
 selects the same unchanged photo can reuse that base. A changed final render
 copies the base and draws current text on each logical region.
+
+Automatic font selection includes the displayed characters in the fontconfig
+request, allowing installed Unicode glyph coverage to inform the selected bold
+font. An explicitly configured font path remains an override.
 
 Images are saved to a same-directory temporary file, flushed, and moved over
 the final name with `os.replace`. GNOME therefore sees either the previous
@@ -286,10 +318,10 @@ succeeds, keeping an interrupted uninstall safely retryable.
 
 ## Platform boundary
 
-Countdown, selection, configuration, display normalization, and rendering are
-testable without a graphical session. Mutter, GNOME, and systemd interactions
-are isolated behind subprocess adapters and exercised with fakes in automated
-tests.
+Countdown math, local-date formatting, selection, configuration, display
+normalization, and rendering are testable without a graphical session. Mutter,
+GNOME, and systemd interactions are isolated behind subprocess adapters and
+exercised with fakes in automated tests.
 
 Ubuntu 26.04 GNOME/Wayland is the initial support target. Broader support needs
 saved adapter fixtures plus live verification; the current source does not make

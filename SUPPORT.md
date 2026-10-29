@@ -5,12 +5,12 @@ the project supports and how to ask for help without publishing private data.
 
 ## Current support boundary
 
-Published v0.1 and v0.2 releases are community-supported. A version counts as
-published only when the exact version appears on both the GitHub release page
-and PyPI; questions about other source revisions are handled as contributor
-issues.
+Published v0.1 and v0.2 releases are community-supported. The same policy applies
+to v0.3 once published. A version counts as published only when the exact version
+appears on both the GitHub release page and PyPI; questions about other source
+revisions are handled as contributor issues.
 
-The v0.2 target is:
+The v0.3 target is:
 
 - Ubuntu 26.04;
 - GNOME on Wayland;
@@ -20,13 +20,19 @@ The v0.2 target is:
 
 Other distributions, X11, other desktop environments, containers, system-wide
 services, remote photo providers, multiple simultaneous events, and graphical
-configuration tools are outside the v0.2 support claim. Useful reports are still
+configuration tools are outside the v0.3 support claim. Useful reports are still
 welcome when they clearly identify an unsupported environment.
 
 Published v0.1 releases retain their Python 3.14 requirement. Live GNOME
 evidence remains limited to the release and configurations recorded in the
-[readiness audit](docs/audits/public-repository-readiness.md); a dependency update
-does not establish new live-platform evidence.
+[readiness audit](docs/audits/public-repository-readiness.md) and the
+[v0.2 release audit](docs/audits/v0.2.0-release.md). A new display mode does not
+by itself establish live evidence for additional monitor configurations.
+
+Version 0.3 supports one countdown or one date/message overlay with one photo
+pool. Existing countdown configurations load unchanged. Date-mode config fields
+require v0.3 or later; restore a compatible private config backup before a
+v0.2 rollback. See [Lifecycle](docs/lifecycle.md).
 
 Support is community-maintained and has no guaranteed response time.
 
@@ -67,8 +73,9 @@ Display class (single/multiple/mirrored; no serials):
 
 Default `countscape doctor` and `countscape status` output, including JSON, is
 redacted, but review either before posting. Never post either command's
-`--include-private` output. Private doctor output contains event, path, font, and
-display details; private status output contains raw timer and render state.
+`--include-private` output. Private doctor output contains message, event,
+timezone, path, font, and display details; private status output contains raw
+timer and render state.
 Include the smallest relevant journal excerpt, not an entire session log.
 
 ## Privacy checklist
@@ -76,7 +83,7 @@ Include the smallest relevant journal excerpt, not an entire session log.
 Remove or replace:
 
 - real photos, generated wallpapers, and screenshots containing personal data;
-- event labels, dates, timezones, and completion messages;
+- overlay messages, event labels, dates, timezones, and completion messages;
 - usernames, home paths, hostnames, and custom data roots;
 - photo filenames and pool signatures;
 - monitor serials, connector identifiers, and distinctive layouts;

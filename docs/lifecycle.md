@@ -28,10 +28,10 @@ before installing v0.1, then run `countscape init --force` and re-enter the
 private target and paths. Do not change an old schema number or copy preview
 state into the v0.1 runtime directory.
 
-## Install v0.2.0
+## Install v0.3.0
 
 ```bash
-uv tool install --python 3.15.2 "countscape==0.2.0"
+uv tool install --python 3.15.2 "countscape==0.3.0"
 countscape --version
 countscape doctor
 countscape install
@@ -63,7 +63,13 @@ and timer schedule from the current environment and configuration.
 
 Countscape v0.2 requires Python >=3.15.2 and Pillow >=13. The upgrade command
 selects the new interpreter explicitly; v0.1 used Python 3.14. The configuration
-and integration-state schemas are unchanged.
+and integration-state schemas were unchanged for that release.
+
+Version 0.3 reads existing countdown configurations unchanged. Its optional
+`[overlay]` table adds date mode while keeping `schema_version = 1`; version
+0.2.0 rejects that new table. Before enabling date mode, keep a private backup
+of a v0.2-compatible countdown configuration outside the repository. A date-only
+configuration has no event target and cannot be used by v0.2.0.
 
 ## Reinstall the current version
 
@@ -79,19 +85,22 @@ countscape install
 ## Roll back
 
 Choose a previously published version whose release notes say it accepts the
-current configuration schema. The concrete rollback target for v0.2.0 is
-v0.1.0 with its Python 3.14 interpreter:
+current configuration. The concrete rollback target for v0.3.0 is v0.2.0 with
+Python 3.15.2. If date mode has been configured, stop the managed timer and wait
+for its service to finish, then restore the private v0.2-compatible countdown
+config backup before replacing the package. Preserve the same ownership seed,
+config location, and storage/state roots; do not substitute a different config.
 
 ```bash
-uv tool install --force --python 3.14 "countscape==0.1.0"
+uv tool install --force --python 3.15.2 "countscape==0.2.0"
 countscape --version
 countscape doctor
 countscape install
 countscape status
 ```
 
-The v0.1.0 rollback restores its Pillow `<13` requirement, which excludes the
-security fixes in Pillow 13. Use that version only as a temporary recovery step.
+The older v0.1.0 release used Python 3.14 and Pillow `<13`, excluding the
+security fixes in Pillow 13. It is not the normal rollback target for v0.3.0.
 
 Package rollback does not rewrite private configuration. If `doctor` rejects the
 current configuration, stop before reinstalling integration and follow the
@@ -100,9 +109,9 @@ checked-in example: its target is deliberately unconfirmed.
 
 ## Change configuration safely
 
-Use `countscape configure` for supported event, schedule, photo, and presentation
-changes. Event and style changes take effect on the next timer run. Schedule
-changes require integration regeneration:
+Use `countscape configure` for supported mode, message, event, schedule, photo,
+and presentation changes. Mode, event, and style changes take effect on the next
+timer run. Schedule changes require integration regeneration:
 
 ```bash
 countscape configure --countdown-refresh-seconds 60

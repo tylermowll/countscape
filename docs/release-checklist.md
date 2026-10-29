@@ -4,13 +4,14 @@ This checklist is the publication gate for Countscape. Complete it from a clean
 release candidate, retain redacted evidence, and do not claim a tag, package, or
 live platform validation before it exists.
 
-The current cross-machine status and unresolved blockers are recorded in the
-[public-repository readiness audit](audits/public-repository-readiness.md).
+Historical baseline and publication evidence is recorded in the
+[public-repository readiness audit](audits/public-repository-readiness.md) and
+dated release audits. Retain candidate-specific results for each publication.
 
 ## 1. Define the release
 
-- [ ] Choose the exact version and intended tag, currently `0.2.0` and
-  `v0.2.0`.
+- [ ] Choose the exact version and intended tag, currently `0.3.0` and
+  `v0.3.0`.
 - [ ] Confirm package and runtime version metadata agree.
 - [ ] Move user-visible changes from `Unreleased` into the release section of
   [CHANGELOG.md](../CHANGELOG.md).
@@ -64,6 +65,9 @@ uv run python tools/privacy_check.py \
 - [ ] Countdown tests cover before, at, and after target boundaries.
 - [ ] Time tests cover daylight-saving changes, backward corrections, and
   suspend-like jumps.
+- [ ] Date-mode tests cover local midnight in the selected IANA timezone,
+  daylight-saving changes, backward/suspend-like jumps, and unchanged-date
+  reuse independently of photo rotation.
 - [ ] Photo/render tests cover missing, empty, invalid, portrait, landscape,
   transparent, oversized decoded sources, Pillow decoding failures, and long-text
   inputs.
@@ -76,6 +80,10 @@ uv run python tools/privacy_check.py \
   retryability after injected destructive-phase failures.
 - [ ] Config tests require `schema_version = 1`, reject pre-v0.1 preview config,
   and validate a distinct recorded runtime-state directory.
+- [ ] Date-only configuration requires a message and IANA timezone without a
+  fabricated event target; existing countdown configs still load unchanged.
+- [ ] Mode-switch and rollback coverage preserves a retained valid event and
+  documents the compatible config backup required by older versions.
 - [ ] Lifecycle tests prove the generated service loads the config-recorded state
   path and uninstall recovery accepts an explicit known `--state-directory`
   without guessing from ambient XDG variables.
@@ -92,7 +100,7 @@ publish only a redacted summary:
 
 ```text
 Countscape live validation
-Release candidate: 0.2.0 / <commit>
+Release candidate: 0.3.0 / <commit>
 Date (UTC): YYYY-MM-DD
 Tester reference: <non-personal identifier>
 
@@ -107,7 +115,10 @@ Environment
 
 Baseline
 - clean exact-version tool install: NOT RUN
-- init with aware target and private temporary photos: NOT RUN
+- tested overlay mode: countdown / date (select one)
+- init in selected mode with private temporary photos: NOT RUN
+- countdown mode: confirmed aware target + matching IANA zone: NOT RUN / NOT APPLICABLE
+- date mode: explicit message + IANA zone, no fabricated target: NOT RUN / NOT APPLICABLE
 - doctor: NOT RUN
 - render without GNOME mutation: NOT RUN
 - user confirmation of preview: NOT RUN
@@ -124,7 +135,8 @@ Display cases
 
 Lifecycle
 - unchanged apply is a no-op: NOT RUN
-- independent countdown/photo bucket boundary: NOT RUN
+- independent countdown/photo bucket boundary: NOT RUN / NOT APPLICABLE
+- date stays unchanged while photos rotate: NOT RUN / NOT APPLICABLE
 - resume after missed timer trigger: NOT RUN
 - exact-version reinstall and integration regeneration: NOT RUN
 - rollback to previous supported version: NOT RUN / NOT APPLICABLE

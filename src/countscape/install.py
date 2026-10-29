@@ -18,6 +18,7 @@ from countscape.config import (
     CONFIG_SCHEMA_VERSION,
     AppConfig,
     DisplayConfig,
+    OverlayConfig,
     RuntimeConfig,
     StyleConfig,
     WallpaperConfig,
@@ -28,6 +29,7 @@ from countscape.config import (
     default_state_directory,
     load_config,
     parse_event,
+    parse_overlay,
     validate_config_location,
     validate_schedule_interval,
     validate_storage_paths,
@@ -137,22 +139,44 @@ def _toml_string(value: str) -> str:
 
 def dump_config(config: AppConfig, *, seed: str | None = None) -> str:
     selection_seed = seed or config.wallpaper.selection_seed
+    overlay = parse_overlay(
+        mode=config.overlay.mode,
+        message=config.overlay.message,
+        timezone=config.overlay.timezone,
+    )
+    if overlay.mode == "countdown" and config.event is None:
+        raise ConfigError("countdown mode requires an event target")
     lines = [
         f"schema_version = {CONFIG_SCHEMA_VERSION}",
         "",
         "[runtime]",
         f"state_directory = {_toml_string(str(config.runtime.state_directory))}",
-        "",
-        "[event]",
-        f"label = {_toml_string(config.event.label)}",
-        f"target = {_toml_string(config.event.target.isoformat())}",
-        f"timezone = {_toml_string(config.event.timezone.key)}",
-        "confirmed = true",
-        f"after_arrival_message = {_toml_string(config.event.after_arrival_message)}",
-        "",
-        "[display]",
-        f"mode = {_toml_string(config.display.mode)}",
     ]
+    if config.event is not None:
+        lines.extend(
+            [
+                "",
+                "[event]",
+                f"label = {_toml_string(config.event.label)}",
+                f"target = {_toml_string(config.event.target.isoformat())}",
+                f"timezone = {_toml_string(config.event.timezone.key)}",
+                "confirmed = true",
+                "after_arrival_message = "
+                f"{_toml_string(config.event.after_arrival_message)}",
+            ]
+        )
+    if overlay != OverlayConfig():
+        lines.extend(
+            [
+                "",
+                "[overlay]",
+                f"mode = {_toml_string(overlay.mode)}",
+                f"message = {_toml_string(overlay.message)}",
+            ]
+        )
+        if overlay.timezone is not None:
+            lines.append(f"timezone = {_toml_string(overlay.timezone.key)}")
+    lines.extend(["", "[display]", f"mode = {_toml_string(config.display.mode)}"])
     if config.display.fallback_profile:
         lines.append(
             f"fallback_profile = {_toml_string(config.display.fallback_profile)}"
@@ -223,8 +247,10 @@ def _positive_interval(value: int, name: str) -> int:
 
 def initialize_config(
     *,
-    target: str,
+    target: str | None = None,
     timezone: str,
+    mode: str = "countdown",
+    message: str | None = None,
     label: str = "Until the big day",
     after_arrival_message: str = "It's here!",
     source_directory: Path | None = None,
@@ -262,11 +288,22 @@ def initialize_config(
                     "configuration has active or unresolved integration state; "
                     "run countscape uninstall before countscape init --force"
                 )
-    event = parse_event(
-        label=label,
-        target=target,
-        timezone=timezone,
-        after_arrival_message=after_arrival_message,
+    overlay = parse_overlay(
+        mode=mode,
+        message=message if message is not None else "",
+        timezone=timezone if mode == "date" else None,
+    )
+    if overlay.mode == "countdown" and target is None:
+        raise ConfigError("countdown mode requires an event target")
+    event = (
+        parse_event(
+            label=label,
+            target=target,
+            timezone=timezone,
+            after_arrival_message=after_arrival_message,
+        )
+        if target is not None
+        else None
     )
     photos = (source_directory or default_photo_directory()).expanduser().resolve()
     output = (output_directory or default_output_directory()).expanduser().resolve()
@@ -297,6 +334,7 @@ def initialize_config(
         ),
         display=DisplayConfig(mode="auto", fallback_profile=None, profiles={}),
         runtime=RuntimeConfig(state_directory=state),
+        overlay=overlay,
     )
     validate_storage_paths(photos, output, cache, state)
     validate_config_location(path, photos, output, cache, state)
@@ -309,6 +347,8 @@ def initialize_config(
 def configure_settings(
     config_path: Path,
     *,
+    mode: str | None = None,
+    message: str | None = None,
     overlay_position: str | None = None,
     photo_fit: str | None = None,
     source_directory: Path | None = None,
@@ -320,6 +360,8 @@ def configure_settings(
     after_arrival_message: str | None = None,
 ) -> Path:
     requested = (
+        mode,
+        message,
         overlay_position,
         photo_fit,
         source_directory,
@@ -338,25 +380,55 @@ def configure_settings(
         raise ConfigError("style.photo_fit must be 'contain' or 'cover'")
 
     config = load_config(config_path)
-    zone = event_timezone or config.event.timezone.key
-    if event_target is None:
-        try:
-            target_zone = ZoneInfo(zone)
-        except ZoneInfoNotFoundError as error:
-            raise ConfigError(f"unknown event.timezone: {zone}") from error
-        target = config.event.target.astimezone(target_zone).isoformat()
-    else:
-        target = event_target
-    event = parse_event(
-        label=event_label if event_label is not None else config.event.label,
-        target=target,
-        timezone=zone,
-        after_arrival_message=(
-            after_arrival_message
-            if after_arrival_message is not None
-            else config.event.after_arrival_message
-        ),
+    selected_mode = mode if mode is not None else config.overlay.mode
+    overlay_zone = config.overlay.timezone
+    if selected_mode == "date":
+        if event_timezone is not None:
+            overlay_zone = event_timezone
+        elif overlay_zone is None and config.event is not None:
+            overlay_zone = config.event.timezone
+    overlay = parse_overlay(
+        mode=selected_mode,
+        message=message if message is not None else config.overlay.message,
+        timezone=overlay_zone,
     )
+    event = config.event
+    event_requested = any(
+        value is not None
+        for value in (event_label, event_target, after_arrival_message)
+    ) or (selected_mode == "countdown" and event_timezone is not None)
+    if event is None and (selected_mode == "countdown" or event_requested):
+        if event_target is None or event_timezone is None:
+            raise ConfigError("creating a countdown requires --target and --timezone")
+        event = parse_event(
+            label=event_label if event_label is not None else "Until the big day",
+            target=event_target,
+            timezone=event_timezone,
+            after_arrival_message=(
+                after_arrival_message
+                if after_arrival_message is not None
+                else "It's here!"
+            ),
+        )
+    elif event is not None and event_requested:
+        zone = event_timezone if event_timezone is not None else event.timezone.key
+        target = event_target
+        if target is None:
+            try:
+                target_zone = ZoneInfo(zone)
+            except (ZoneInfoNotFoundError, ValueError) as error:
+                raise ConfigError(f"unknown event.timezone: {zone}") from error
+            target = event.target.astimezone(target_zone).isoformat()
+        event = parse_event(
+            label=event_label if event_label is not None else event.label,
+            target=target,
+            timezone=zone,
+            after_arrival_message=(
+                after_arrival_message
+                if after_arrival_message is not None
+                else event.after_arrival_message
+            ),
+        )
     wallpaper = replace(
         config.wallpaper,
         source_directory=(
@@ -395,6 +467,7 @@ def configure_settings(
     updated = replace(
         config,
         event=event,
+        overlay=overlay,
         wallpaper=wallpaper,
         style=replace(
             config.style,
