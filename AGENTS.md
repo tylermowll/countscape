@@ -59,16 +59,17 @@ wallpapers, caches, or absolute user paths.
 
 ## Product status
 
-The package, `countscape init`, XDG data split, independent second-based
-schedules, render reuse, idempotent GNOME apply, installed-package service, and
-ownership-marker uninstall are implemented. Version 0.2.0 is published on PyPI
-and as an immutable GitHub release from protected tag `v0.2.0`. The exact public
+The package, `countscape init`, date/message mode, XDG data split, independent
+second-based schedules, render reuse, idempotent GNOME apply, installed-package service, and
+ownership-marker uninstall are implemented. Version 0.3.0 is published on PyPI
+and as an immutable GitHub release from protected tag `v0.3.0`. The exact public
 wheel and source archive, a clean public-index installation, and both PyPI
-publish attestations were verified on 2026-10-29. The fresh live GNOME baseline
-was NOT RUN under an explicit maintainer-approved publication exception for
-v0.2.0, recorded in [the release audit](docs/audits/v0.2.0-release.md). Do not
-claim broader platform support or live configurations beyond the recorded
-evidence; v0.1.0's historical validation remains separately recorded.
+publish attestations were verified on 2026-10-29. The date-mode live GNOME
+baseline passed on the recorded two-monitor configuration, including user
+visual confirmation and natural timer rotation/reuse, as documented in
+[the release audit](docs/audits/v0.3.0-release.md). Do not claim broader platform
+support or live configurations beyond that evidence. Earlier release evidence
+and v0.2.0's publication-time exception remain separately recorded.
 
 The checked-in example intentionally has `event.confirmed = false`. Do not turn
 it into an installable default target; user configuration must be generated or

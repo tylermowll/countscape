@@ -5,10 +5,10 @@ the project supports and how to ask for help without publishing private data.
 
 ## Current support boundary
 
-Published v0.1 and v0.2 releases are community-supported. The same policy applies
-to v0.3 once published. A version counts as published only when the exact version
-appears on both the GitHub release page and PyPI; questions about other source
-revisions are handled as contributor issues.
+Published v0.1, v0.2, and v0.3 releases are community-supported. A version counts
+as published only when the exact version appears on both the GitHub release
+page and PyPI; questions about other source revisions are handled as
+contributor issues.
 
 The v0.3 target is:
 
