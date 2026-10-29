@@ -96,6 +96,11 @@ and again before full render decoding. Pillow decode and decompression-bomb
 failures become controlled input errors. Output and state are replaced
 atomically, and render/apply operations are serialized.
 
+That lock does not serialize installation, removal, or package replacement.
+Follow the [lifecycle maintenance steps](lifecycle.md#pause-integration-before-maintenance)
+to stop timer wakes and wait for active service/render commands before making
+those changes.
+
 Pillow and the host desktop stack still process local files and system responses.
 Keep dependencies current, use only photos you trust, and report unexpected file
 access, deletion, command construction, or parser behavior privately.

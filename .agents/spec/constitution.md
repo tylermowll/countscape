@@ -17,13 +17,13 @@ product focused, offline, and reversible.
   generated wallpapers, secrets, logs, and machine state do not belong in the
   public repository or release artifacts.
 - Source photos are user-owned, read-only inputs. Countscape never renames,
-  rewrites, or deletes them.
+  rewrites, copies, or deletes them, including during tests and uninstall.
 - The user explicitly selects a photo directory. Countscape does not crawl the
   home directory to infer one.
-- Generated images, cache, configuration, and integration state have distinct,
-  nonoverlapping paths with documented ownership and removal rules. Never use a
-  personal username, home path, event, monitor resolution, or connector name as
-  a universal default.
+- Configuration, source photos, persistent output, rebuildable cache, and state
+  have distinct, nonoverlapping paths with documented ownership and removal
+  rules. Never use a personal username, home path, event, monitor resolution, or
+  connector name as a universal default.
 - Uninstall removes only validated Countscape-managed files and preserves user
   configuration and source photos.
 - If integration ownership or wallpaper restoration cannot be proven, removal
@@ -60,6 +60,10 @@ product focused, offline, and reversible.
   file.
 - Serialize render/apply operations and preserve the last known-good wallpaper
   when an operation fails.
+- The render/apply lock does not serialize lifecycle changes. Run install,
+  uninstall, and package replacement sequentially, without overlapping
+  render/apply or an active timer-started service; follow
+  [Lifecycle](../../docs/lifecycle.md).
 - Do not leave GNOME pointing at an output that ordinary cache cleanup may
   remove.
 

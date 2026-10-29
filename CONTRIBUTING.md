@@ -131,6 +131,10 @@ in [docs/troubleshooting.md](docs/troubleshooting.md).
 
 Repository documentation is canonical:
 
+- [AGENTS.md](AGENTS.md) and [agent conventions](.agents/README.md) for repository
+  instructions and discovery;
+- [the repository constitution](.agents/spec/constitution.md) for durable
+  product invariants;
 - [docs/install.md](docs/install.md) for first installation;
 - [docs/configuration.md](docs/configuration.md) for the schema and settings;
 - [docs/lifecycle.md](docs/lifecycle.md) for update, rollback, and uninstall;

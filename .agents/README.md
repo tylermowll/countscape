@@ -5,9 +5,12 @@ point. Keep it concise: durable constraints, useful commands, and pointers to
 task-specific documentation. Add nested `AGENTS.md` files only where a directory
 has distinct instructions; keep changing release status in the dated audits.
 
-`spec/constitution.md` is Countscape's durable product contract. It is ordinary
-referenced documentation, read for behavior and invariant changes; `.agents/spec`
-has no special Codex discovery behavior.
+[The repository constitution](spec/constitution.md) is Countscape's durable
+product contract. It is ordinary referenced documentation, read for behavior and
+invariant changes; `.agents/spec` has no special Codex discovery behavior.
+Keep its ownership and concurrency rules consistent with the
+[security model](../docs/security-model.md) and
+[lifecycle guide](../docs/lifecycle.md).
 
 Codex discovers repository skills in `.agents/skills/<name>/SKILL.md`. Add one
 when a recurring task benefits from its own workflow, using a short description

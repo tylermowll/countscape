@@ -13,6 +13,9 @@ uses semantic versioning once releases are published.
 - Streamline agent instructions with task-specific references, retain the
   product contract under `.agents/spec`, and document current Codex discovery
   conventions without adding unnecessary skills.
+- Align the agent contract's photo, storage, and concurrency rules with the
+  user guides. Clarify package-maintenance pauses, `--no-start`, and retained
+  event editing in date mode.
 
 ## 0.3.0 - 2026-10-29
 

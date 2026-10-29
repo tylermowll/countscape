@@ -1,7 +1,8 @@
 # Countscape agent instructions
 
 Countscape is an offline photo wallpaper with a countdown or current date and
-message for Ubuntu GNOME/Wayland. Python >=3.15.2 is required for v0.2 and later.
+message for Ubuntu 26.04 GNOME/Wayland. Python >=3.15.2 is required for v0.2 and
+later.
 
 ## Repository constraints
 

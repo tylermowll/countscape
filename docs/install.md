@@ -113,9 +113,10 @@ timezone values. Add `--mode date` to choose message-and-date initialization.
 > [!WARNING]
 > Pre-v0.1 preview config and integration state are unsupported and are not
 > migrated. Remove preview integration with the matching preview code before
-> installing v0.1, then recreate configuration with `countscape init --force`
-> and re-enter the private target and paths. Do not add `schema_version = 1` to
-> an old file or move old state into the new runtime directory.
+> installing a published release, then recreate configuration with
+> `countscape init --force` and re-enter the private overlay settings and paths.
+> Do not add `schema_version = 1` to an old file or move old state into the new
+> runtime directory.
 
 ## 3. Add photos
 
@@ -154,11 +155,17 @@ persistent wall-clock timer under `[runtime].state_directory/systemd/`, then
 links them into the systemd user manager. No system service or root-owned file is
 created.
 
-To write the units without starting the timer:
+On a first installation, write and link the units without starting the timer:
 
 ```bash
 countscape install --no-start
 ```
+
+This still publishes the units and reloads the user manager. On an existing
+installation, `--no-start` skips starting or restarting the timer; it does not
+stop an already active timer. Use the
+[maintenance pause](lifecycle.md#pause-integration-before-maintenance) before
+regenerating existing integration.
 
 Inspect the service and timer with:
 
