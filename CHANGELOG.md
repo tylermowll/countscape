@@ -18,6 +18,8 @@ No unreleased changes are recorded yet.
   versions; the committed lock records the exact development environment.
 - Refresh the dependency lock and pinned GitHub Actions used for validation,
   provenance, and publication.
+- Submit the resolved dependency graph from `uv` in CI while Dependabot's
+  updater lacks Python 3.15 support, preserving dependency-alert coverage.
 - Update installation and upgrade commands for Python 3.15.2 while retaining an
   explicit v0.1.0 rollback with Python 3.14. Configuration and integration-state
   schemas are unchanged.
@@ -25,6 +27,9 @@ No unreleased changes are recorded yet.
 Live GNOME evidence remains limited to the release and configurations recorded
 in the [readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md). Automated
 checks for this dependency update do not establish new live-platform evidence.
+The maintainer authorized publication with the fresh live baseline recorded as
+NOT RUN; the exception applies only to v0.2.0. See the
+[release validation record](https://github.com/tylermowll/countscape/blob/main/docs/audits/v0.2.0-release.md).
 
 ## 0.1.0 - 2026-08-23
 

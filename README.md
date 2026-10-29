@@ -144,6 +144,9 @@ countscape uninstall
 uv tool uninstall countscape
 ```
 
+The v0.1.0 rollback restores its Pillow `<13` requirement, which excludes the
+security fixes in Pillow 13. Use that version only as a temporary recovery step.
+
 Configuration and source photos are preserved by `countscape uninstall`.
 Generated files are removed only after Countscape validates ownership and
 confirms that GNOME no longer references them. See the complete

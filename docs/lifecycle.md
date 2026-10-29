@@ -86,6 +86,9 @@ countscape install
 countscape status
 ```
 
+The v0.1.0 rollback restores its Pillow `<13` requirement, which excludes the
+security fixes in Pillow 13. Use that version only as a temporary recovery step.
+
 Package rollback does not rewrite private configuration. If `doctor` rejects the
 current configuration, stop before reinstalling integration and follow the
 recovery notes for the target release. Do not replace configuration with the
