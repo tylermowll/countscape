@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-## Does Countscape upload my photos or event?
+## Does Countscape upload my photos, message, or event?
 
 No. Normal operation is local and offline. Python and package dependencies may
 need network access during installation. See [[Privacy]] and the
@@ -25,13 +25,34 @@ Installing missing Ubuntu host packages is outside Countscape itself.
 
 ## Can I use another desktop environment, X11, or another distribution?
 
-The v0.1 support target is Ubuntu 26.04 GNOME/Wayland. Other environments are
-not supported claims until fixtures and live evidence exist. Check
-[[Tested GNOME Configurations]] for published evidence.
+The v0.3 support target is Ubuntu 26.04 GNOME/Wayland with Python >=3.15.2.
+Other environments are not supported claims until fixtures and live evidence
+exist. Check [[Tested GNOME Configurations]] for published evidence.
 
 ## Can I configure multiple simultaneous events?
 
-Not in v0.1. One private config represents one countdown and photo pool.
+No. Version 0.3 supports one countdown or one date/message overlay with one
+photo pool.
+
+## Can I show today's date and a message without an event?
+
+Yes. For a new configuration, initialize date mode with a message and explicit
+IANA timezone:
+
+```bash
+countscape init --mode date --message "A good day" --timezone "Etc/UTC"
+```
+
+For an existing countdown configuration:
+
+```bash
+countscape configure --mode date --message "A good day" --timezone "Etc/UTC"
+```
+
+Its event is retained, and
+`countscape configure --mode countdown` resumes it. See the
+[configuration guide](https://github.com/tylermowll/countscape/blob/main/docs/configuration.md#current-date-and-message)
+for creating a countdown from a date-only configuration.
 
 ## Why must the target include both an offset and an IANA timezone?
 
@@ -41,9 +62,11 @@ guessing.
 
 ## Why did a timer run without creating a new image?
 
-Unchanged work is intentionally idempotent. If the visible countdown, selected
-photo, layout, event, and style are unchanged, Countscape reuses the complete
-output and avoids rewriting GNOME settings.
+Overlay refresh and photo rotation run on independent schedules. When visible
+text, the selected photo, layout, and other rendering inputs are unchanged,
+Countscape reuses the complete output and avoids rewriting GNOME settings. In
+date mode, the date comes from the chosen timezone; minute-level wakes can reuse
+it while photo rotation continues separately.
 
 ## Can I edit the systemd units?
 

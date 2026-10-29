@@ -25,9 +25,12 @@ welcome when they clearly identify an unsupported environment.
 
 Published v0.1 releases retain their Python 3.14 requirement. Live GNOME
 evidence remains limited to the release and configurations recorded in the
-[readiness audit](docs/audits/public-repository-readiness.md) and the
-[v0.2 release audit](docs/audits/v0.2.0-release.md). A new display mode does not
-by itself establish live evidence for additional monitor configurations.
+[historical v0.1 readiness audit](docs/audits/public-repository-readiness.md)
+and the [v0.3 release audit](docs/audits/v0.3.0-release.md). The
+[v0.2 release audit](docs/audits/v0.2.0-release.md) separately records its
+maintainer-authorized publication exception with a fresh live baseline not run.
+The v0.3 date-mode baseline does not add live scaling, mirroring, suspend/resume,
+or rollback/uninstall evidence.
 
 Version 0.3 supports one countdown or one date/message overlay with one photo
 pool. Existing countdown configurations load unchanged. Date-mode config fields
@@ -44,7 +47,7 @@ Support is community-maintained and has no guaranteed response time.
 3. Run `countscape doctor` locally.
 4. Check `countscape status` and the user-service journal when integration is
    involved.
-5. Reproduce with synthetic event text and generated placeholder images when
+5. Reproduce with synthetic overlay text and generated placeholder images when
    possible.
 6. Search existing issues.
 
