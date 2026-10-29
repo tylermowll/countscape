@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
+import unicodedata
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
@@ -16,8 +17,9 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from countscape.config import AppConfig
 from countscape.countdown import CountdownState, calculate_countdown
+from countscape.date_display import DateState, current_date_state
 from countscape.display import build_canvas_layout
-from countscape.errors import CountdownError, StateError
+from countscape.errors import ConfigError, CountdownError, StateError
 from countscape.models import CanvasLayout, CanvasRegion, DisplayLayout
 from countscape.photos import (
     PhotoPool,
@@ -65,14 +67,28 @@ def resolve_font(
     configured: Path | None,
     *,
     runner: Runner = subprocess.run,
+    text: str | None = None,
 ) -> Path:
     if configured:
         if configured.is_file():
             return configured
         raise CountdownError(f"configured font does not exist: {configured}")
+    command = FONT_COMMAND
+    if text:
+        characters = sorted(
+            {
+                ord(character)
+                for character in text
+                if not unicodedata.category(character).startswith("C")
+                and not 0xFE00 <= ord(character) <= 0xFE0F
+            }
+        )
+        charset = " ".join(f"{character:x}" for character in characters)
+        if charset:
+            command = (*FONT_COMMAND[:-1], f"{FONT_COMMAND[-1]}:charset={charset}")
     try:
         result = runner(
-            FONT_COMMAND,
+            command,
             check=False,
             capture_output=True,
             text=True,
@@ -179,7 +195,7 @@ def _text_metrics(
 def _draw_overlay(
     canvas: Image.Image,
     region: CanvasRegion,
-    state: CountdownState,
+    state: CountdownState | DateState,
     label: str,
     font_path: Path,
     *,
@@ -447,22 +463,13 @@ def _render_key(
     canvas: CanvasLayout,
     pool: PhotoPool,
     selected: Path,
-    countdown: CountdownState,
+    countdown: CountdownState | DateState,
 ) -> dict[str, Any]:
-    return {
-        "version": 1,
-        "countdown_text": countdown.text,
-        "arrived": countdown.arrived,
+    common = {
         "pool_signature": pool.signature,
         "selected": selected.relative_to(pool.root).as_posix(),
         "display_signature": canvas.display_signature,
         "canvas": [canvas.width, canvas.height],
-        "event": {
-            "label": config.event.label,
-            "target": config.event.target.isoformat(),
-            "timezone": config.event.timezone.key,
-            "after_arrival_message": config.event.after_arrival_message,
-        },
         "style": {
             "font": str(config.style.font or ""),
             "overlay_position": config.style.overlay_position,
@@ -470,6 +477,34 @@ def _render_key(
             "font_ratio": config.style.font_ratio,
             "photo_fit": config.style.photo_fit,
         },
+    }
+    if isinstance(countdown, DateState):
+        if config.overlay.timezone is None:
+            raise ConfigError("date display requires an IANA timezone")
+        return {
+            "version": 2,
+            "overlay": {
+                "mode": "date",
+                "message": config.overlay.message,
+                "timezone": config.overlay.timezone.key,
+                "date": countdown.local_date.isoformat(),
+                "text": countdown.text,
+            },
+            **common,
+        }
+    if config.event is None:
+        raise ConfigError("countdown mode requires an event")
+    return {
+        "version": 1,
+        "countdown_text": countdown.text,
+        "arrived": countdown.arrived,
+        "event": {
+            "label": config.event.label,
+            "target": config.event.target.isoformat(),
+            "timezone": config.event.timezone.key,
+            "after_arrival_message": config.event.after_arrival_message,
+        },
+        **common,
     }
 
 
@@ -532,22 +567,32 @@ def render_wallpaper(
         max_pixels=config.wallpaper.max_canvas_pixels,
     )
     output_directory = config.wallpaper.output_directory
-    current_countdown = calculate_countdown(
-        current,
-        config.event.target,
-        config.event.after_arrival_message,
-    )
-    if current_countdown.arrived:
-        countdown = current_countdown
+    countdown: CountdownState | DateState
+    if config.overlay.mode == "date":
+        if config.overlay.timezone is None:
+            raise ConfigError("date display requires an IANA timezone")
+        countdown = current_date_state(current, config.overlay.timezone)
+        label = config.overlay.message
     else:
-        countdown = calculate_countdown(
-            datetime.fromtimestamp(
-                text_bucket * config.wallpaper.countdown_refresh_seconds,
-                tz=UTC,
-            ),
+        if config.event is None:
+            raise ConfigError("countdown mode requires an event")
+        current_countdown = calculate_countdown(
+            current,
             config.event.target,
             config.event.after_arrival_message,
         )
+        if current_countdown.arrived:
+            countdown = current_countdown
+        else:
+            countdown = calculate_countdown(
+                datetime.fromtimestamp(
+                    text_bucket * config.wallpaper.countdown_refresh_seconds,
+                    tz=UTC,
+                ),
+                config.event.target,
+                config.event.after_arrival_message,
+            )
+        label = config.event.label
     render_key = _render_key(
         config,
         canvas,
@@ -576,7 +621,11 @@ def render_wallpaper(
         reusable = _reusable_output(output_directory, prior_state, render_key)
         if reusable is not None:
             return reusable
-        font = resolve_font(config.style.font, runner=runner)
+        font = resolve_font(
+            config.style.font,
+            runner=runner,
+            text=f"{label} {countdown.text}",
+        )
         base = _load_or_build_base(
             config,
             canvas,
@@ -589,7 +638,7 @@ def render_wallpaper(
                 final,
                 region,
                 countdown,
-                config.event.label,
+                label,
                 font,
                 font_ratio=config.style.font_ratio,
                 margin_ratio=config.style.margin_ratio,

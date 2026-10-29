@@ -247,7 +247,7 @@ def render_release_notes(
         "Wayland. It uses the current user's GNOME settings and systemd user "
         "manager; root is not required for Countscape itself.\n\n"
         "## Known limitations\n\n"
-        "- One private configuration represents one countdown and photo pool.\n"
+        "- One private configuration represents one overlay mode and photo pool.\n"
         "- X11, other desktop environments, other distributions, and other "
         "operating systems are not supported release claims.\n"
         "- Live GNOME compatibility is limited to the configurations explicitly "

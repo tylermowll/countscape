@@ -1,16 +1,16 @@
 # Countscape
 
-**A private, offline photo countdown wallpaper for Ubuntu GNOME.**
+**A private, offline photo wallpaper with a countdown or today's date.**
 
 [![CI](https://github.com/tylermowll/countscape/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tylermowll/countscape/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/tylermowll/countscape/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/tylermowll/countscape/actions/workflows/codeql.yml)
 
 ![Countscape turns local photo cards and a countdown clock into a wallpaper across two displays.](https://raw.githubusercontent.com/tylermowll/countscape/7defea8c3ed9c05164069ff2d05e11a6cca45975/docs/assets/countscape-hero.webp)
 
-Countscape turns a folder of local photos into a timezone-aware countdown
-wallpaper. It understands GNOME/Wayland display layouts, renders every monitor as
-one coherent canvas, and updates the wallpaper from a user-scoped systemd timer.
-Your source photos stay where they are and are never modified.
+Countscape combines local photos with a timezone-aware countdown or today's date
+and a message. It understands GNOME/Wayland display layouts, renders every monitor
+as one coherent canvas, and updates the wallpaper from a user-scoped systemd
+timer. Your source photos stay where they are and are never modified.
 
 > [!IMPORTANT]
 > Install only exact versions that appear on both the
@@ -23,6 +23,7 @@ Your source photos stay where they are and are never modified.
 
 - Local JPG, JPEG, and PNG photo pools; no cloud account, upload, or telemetry.
 - Aware countdowns with an explicit UTC offset and matching IANA timezone.
+- Current-date overlays with a message and explicit IANA timezone; no target needed.
 - Independent countdown-refresh and photo-rotation schedules.
 - Mixed orientation, scaling, transforms, and mirrored GNOME/Wayland layouts.
 - `contain` and `cover` photo fitting with adaptive, wrapped overlay text.
@@ -31,7 +32,7 @@ Your source photos stay where they are and are never modified.
 
 ## Supported platform
 
-| Component | v0.2 support target |
+| Component | v0.3 support target |
 |---|---|
 | Operating system | Ubuntu 26.04 |
 | Desktop | GNOME on Wayland |
@@ -50,7 +51,7 @@ Install [`uv`](https://docs.astral.sh/uv/), then install the exact Countscape
 release into a persistent tool environment:
 
 ```bash
-uv tool install --python 3.15.2 "countscape==0.2.0"
+uv tool install --python 3.15.2 "countscape==0.3.0"
 countscape --version
 ```
 
@@ -64,6 +65,15 @@ countscape init \
   --label "Until the big day" \
   --after-message "It's here!"
 ```
+
+For the current date and a message, use this initialization command instead:
+
+```bash
+countscape init --mode date --message "A good day" --timezone "Etc/UTC"
+```
+
+Date mode shows the weekday, month, day, and year in the chosen timezone. It
+needs no event target and keeps photo rotation independent of date refresh.
 
 Add at least one `.jpg`, `.jpeg`, or `.png` directly to:
 
@@ -99,7 +109,7 @@ systemctl --user list-timers countscape.timer
 ```
 
 `calibrate` creates a numbered display-layout image without reading the photo
-bank. If you apply it, run `countscape apply` afterward to restore the countdown.
+bank. If you apply it, run `countscape apply` afterward to restore your wallpaper.
 
 Common changes do not require hand-editing TOML:
 
@@ -120,6 +130,17 @@ countscape configure \
 Rerun `countscape install` after changing either schedule so the timer is
 regenerated. Event and presentation changes take effect on the next timer run.
 
+To switch an existing configuration to date mode:
+
+```bash
+countscape configure --mode date --message "A good day" --timezone "Etc/UTC"
+```
+
+The existing event is retained. `countscape configure --mode countdown` resumes
+it. A configuration initialized in date mode needs a target and timezone before
+it can show a countdown; see the
+[configuration guide](https://github.com/tylermowll/countscape/blob/main/docs/configuration.md).
+
 ## Version lifecycle
 
 Always name the version you intend to run. After any package upgrade, downgrade,
@@ -130,6 +151,10 @@ An exact-version tool install records its pin in uv's receipt. `uv tool upgrade`
 retains that requirement, so use a forced tool install to replace the pin when
 changing versions.
 
+Before enabling date mode, keep a private backup of a compatible countdown
+configuration. Version 0.2.0 rejects the new `[overlay]` table; restore that backup
+before rolling back. Keep the backup outside this repository.
+
 ```bash
 # Upgrade to an exact published version; replace X.Y.Z.
 uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
@@ -137,8 +162,8 @@ countscape --version
 countscape doctor
 countscape install
 
-# Roll back to v0.1.0.
-uv tool install --force --python 3.14 "countscape==0.1.0"
+# Restore the compatible private config backup, then roll back to v0.2.0.
+uv tool install --force --python 3.15.2 "countscape==0.2.0"
 countscape --version
 countscape doctor
 countscape install
@@ -147,9 +172,6 @@ countscape install
 countscape uninstall
 uv tool uninstall countscape
 ```
-
-The v0.1.0 rollback restores its Pillow `<13` requirement, which excludes the
-security fixes in Pillow 13. Use that version only as a temporary recovery step.
 
 Configuration and source photos are preserved by `countscape uninstall`.
 Generated files are removed only after Countscape validates ownership and
@@ -192,13 +214,13 @@ monitor data, or other machine information.
 | Guide | Purpose |
 |---|---|
 | [Installation](https://github.com/tylermowll/countscape/blob/main/docs/install.md) | Prerequisites and first setup |
-| [Configuration](https://github.com/tylermowll/countscape/blob/main/docs/configuration.md) | Event, schedule, style, storage, and display schema |
+| [Configuration](https://github.com/tylermowll/countscape/blob/main/docs/configuration.md) | Date/message mode, event, schedule, style, storage, and display schema |
 | [Lifecycle](https://github.com/tylermowll/countscape/blob/main/docs/lifecycle.md) | Exact-version install, update, rollback, and uninstall |
 | [Troubleshooting](https://github.com/tylermowll/countscape/blob/main/docs/troubleshooting.md) | Diagnostics and safe recovery |
 | [Security model](https://github.com/tylermowll/countscape/blob/main/docs/security-model.md) | Trust boundaries and local-data handling |
 | [Architecture](https://github.com/tylermowll/countscape/blob/main/docs/architecture.md) | Current implementation and data flow |
 | [Release checklist](https://github.com/tylermowll/countscape/blob/main/docs/release-checklist.md) | Artifact gates and live Ubuntu evidence |
-| [Release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md) | v0.1 release evidence and project status |
+| [Release-readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md) | Historical v0.1 platform evidence |
 | [Community Wiki](https://github.com/tylermowll/countscape/wiki) | Privacy-safe FAQ, recipes, and community troubleshooting |
 | [Support](https://github.com/tylermowll/countscape/blob/main/SUPPORT.md) | Supported scope and how to ask for help |
 

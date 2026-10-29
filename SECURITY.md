@@ -2,14 +2,16 @@
 
 ## Supported versions
 
-Published Countscape v0.1 and v0.2 releases are the supported security lines. A
-version counts as published only when the exact version appears on both the
-GitHub release page and PyPI. Update this table as part of every later release:
+Published Countscape v0.1 and v0.2 releases are supported security lines. The
+v0.3 line becomes supported when published. A version counts as published only
+when the exact version appears on both the GitHub release page and PyPI. Update
+this table as part of every later release:
 
 | Version | Supported |
 |---|---|
 | Published v0.1 line | Yes |
 | Published v0.2 line | Yes |
+| Published v0.3 line | Yes, once published on both channels |
 | Default-branch and other unpublished builds | No |
 | Older release lines | No |
 
@@ -34,8 +36,8 @@ Include privately, when possible:
 - the supported Ubuntu/GNOME environment used;
 - impact and preconditions;
 - minimal reproduction steps using synthetic data;
-- whether source photos, config, state, wallpaper settings, or managed files were
-  exposed or changed; and
+- whether source photos, messages, config, state, wallpaper settings, or managed
+  files were exposed or changed; and
 - any safe mitigation you have identified.
 
 Maintainers will assess the report, keep sensitive details private while a fix

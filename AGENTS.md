@@ -2,7 +2,8 @@
 
 ## Repository identity
 
-Countscape is an offline photo countdown wallpaper for Ubuntu GNOME/Wayland.
+Countscape is an offline photo wallpaper with a countdown or current date and
+message for Ubuntu GNOME/Wayland.
 Read `.agents/spec/constitution.md` before changing the project.
 
 The repository is intentionally public and must contain no personal photos,

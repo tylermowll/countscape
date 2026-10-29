@@ -1,6 +1,7 @@
 # Configuration
 
-`countscape init` creates a private, confirmed configuration. Prefer
+`countscape init` creates a private configuration. Countdown mode confirms an
+aware target; date mode requires a message and timezone without a target. Prefer
 `countscape configure` for supported changes; edit TOML only for settings that
 the command does not expose.
 
@@ -8,11 +9,16 @@ The checked-in [example](../config/countscape.example.toml) is schema reference
 only. It has `event.confirmed = false`, a placeholder seed, and generic paths, so
 it cannot be installed as a target.
 
-Every v0.1 config begins with:
+The configuration begins with:
 
 ```toml
 schema_version = 1
 ```
+
+Version 0.3 reads earlier countdown configurations unchanged. It adds an
+optional `[overlay]` table; v0.2.0 rejects that table even though the schema
+number remains 1. Keep a private compatible config backup before enabling date
+mode, and restore it before a v0.2.0 rollback. See [Lifecycle](lifecycle.md).
 
 Pre-v0.1 preview config and state are not migrated. Remove preview integration
 with the matching preview code, recreate the config through
@@ -33,9 +39,9 @@ directory. Absolute paths are clearer for installed integration. If you use XDG
 overrides, set them consistently for initialization, diagnostics, installation,
 status, and uninstall, then rerun `countscape install` after changing them.
 
-Treat the config as private. It contains the event label and instant, filesystem
-paths, timezone, display details when profiles are present, and a stable random
-selection seed.
+Treat the config as private. It contains the message or event label and instant,
+filesystem paths, timezone, display details when profiles are present, and a
+stable random selection seed.
 
 ## Runtime state
 
@@ -58,9 +64,10 @@ Choose a custom dedicated directory during initialization:
 countscape init --state-directory "/path/to/runtime-state"
 ```
 
-The command prompts for any omitted required event values. Runtime state is not
-an ordinary presentation setting; uninstall existing integration before changing
-its location.
+The command defaults to countdown mode and prompts for omitted event values.
+Use `--mode date --message "A good day" --timezone "Etc/UTC"` for date mode.
+Runtime state is not an ordinary presentation setting; uninstall existing
+integration before changing its location.
 
 Keep runtime state separate and nonoverlapping with the config directory, photos,
 output, and cache. It must be a dedicated subdirectory, not the filesystem root
@@ -70,6 +77,8 @@ config or backup is the explicit uninstall recovery input; see
 [Lifecycle](lifecycle.md).
 
 ## Event
+
+Countdown mode is the default when `[overlay]` is absent. Its event is required:
 
 ```toml
 [event]
@@ -94,6 +103,64 @@ countscape configure \
   --timezone "America/New_York" \
   --after-message "We made it!"
 ```
+
+## Current date and message
+
+```toml
+[overlay]
+mode = "date"
+message = "A good day"
+timezone = "Etc/UTC"
+```
+
+Date mode shows the current weekday, month, day, and year in the chosen IANA
+timezone, together with the message. It derives the calendar date from the
+actual timezone-aware instant, so local midnight and daylight-saving changes
+are handled independently of UTC countdown buckets. Photo rotation keeps its
+separate schedule.
+
+Initialize date mode without inventing an event target:
+
+```bash
+countscape init --mode date --message "A good day" --timezone "Etc/UTC"
+```
+
+Switch an existing countdown configuration:
+
+```bash
+countscape configure --mode date --message "A good day" --timezone "Etc/UTC"
+```
+
+The message is trimmed, limited to 160 characters, and cannot contain control
+characters or newlines. Unicode messages, such as `❤️ Welcome ❤️`, are accepted;
+available glyphs depend on the chosen system font.
+
+A retained `[event]` remains unchanged and must still contain a confirmed,
+timezone-aware target. If `--timezone` is omitted when switching modes, the
+existing date timezone is reused, or the retained event timezone is used. A
+date-only configuration must provide an IANA timezone. Changing `--timezone`
+while in date mode changes the date timezone and preserves the inactive event.
+
+Resume a retained event with:
+
+```bash
+countscape configure --mode countdown
+```
+
+A configuration initialized in date mode has no event. To create a countdown,
+supply the target and zone explicitly:
+
+```bash
+countscape configure \
+  --mode countdown \
+  --target "2030-01-01T12:00:00+00:00" \
+  --timezone "Etc/UTC" \
+  --event-label "Until the big day" \
+  --after-message "It's here!"
+```
+
+Do not turn the checked-in unconfirmed example into a target by changing modes.
+Use initialization or explicitly confirm a real private event configuration.
 
 ## Storage
 
@@ -145,6 +212,11 @@ The schedules are independent. An interval of at least 60 seconds must be a
 whole number of minutes. A sub-minute value must divide 60 evenly. This keeps
 systemd triggers aligned to wall-clock boundaries.
 
+In date mode, `countdown_refresh_seconds` is the overlay refresh cadence. Its
+default minute interval detects local midnight on the next scheduled wake.
+When the visible date, message, and selected photo are unchanged, rendering and
+GNOME application reuse the existing output.
+
 ```bash
 countscape configure \
   --countdown-refresh-seconds 60 \
@@ -178,8 +250,9 @@ font_ratio = 0.055
 photo_fit = "contain"
 ```
 
-- Empty `font` resolves a bold system font through fontconfig; otherwise use a
-  font file path.
+- Empty `font` asks fontconfig for a bold system font matching the active
+  overlay's characters, including Unicode message glyphs where available;
+  otherwise use an explicit font file path.
 - `overlay_position` is `bottom` or `center`.
 - `photo_fit` is `contain` (show the entire photo) or `cover` (fill and crop).
 - `margin_ratio` must be greater than 0 and at most 0.25.

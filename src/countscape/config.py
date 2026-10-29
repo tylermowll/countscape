@@ -25,6 +25,13 @@ class EventConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class OverlayConfig:
+    mode: str = "countdown"
+    message: str = ""
+    timezone: ZoneInfo | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class WallpaperConfig:
     source_directory: Path
     output_directory: Path
@@ -59,11 +66,12 @@ class RuntimeConfig:
 @dataclass(frozen=True, slots=True)
 class AppConfig:
     path: Path
-    event: EventConfig
+    event: EventConfig | None
     wallpaper: WallpaperConfig
     style: StyleConfig
     display: DisplayConfig
     runtime: RuntimeConfig
+    overlay: OverlayConfig = OverlayConfig()
 
 
 def _xdg_path(variable: str, fallback: Path) -> Path:
@@ -215,6 +223,53 @@ def _display_text(value: str, name: str) -> str:
     if any(unicodedata.category(character) == "Cc" for character in cleaned):
         raise ConfigError(f"{name} must not contain control characters or newlines")
     return cleaned
+
+
+def parse_overlay(
+    *,
+    mode: str = "countdown",
+    message: str = "",
+    timezone: str | ZoneInfo | None = None,
+) -> OverlayConfig:
+    if not isinstance(mode, str) or mode not in {"countdown", "date"}:
+        raise ConfigError("overlay.mode must be 'countdown' or 'date'")
+    if not isinstance(message, str):
+        raise ConfigError("overlay.message must be a string")
+    if any(unicodedata.category(character) == "Cc" for character in message):
+        raise ConfigError(
+            "overlay.message must not contain control characters or newlines"
+        )
+    clean_message = (
+        _display_text(message, "overlay.message") if message or mode == "date" else ""
+    )
+    zone: ZoneInfo | None = None
+    if timezone is not None:
+        key = timezone.key if isinstance(timezone, ZoneInfo) else timezone
+        if not isinstance(key, str) or not key.strip():
+            raise ConfigError("overlay.timezone must be a non-empty IANA zone")
+        try:
+            zone = ZoneInfo(key)
+        except (ZoneInfoNotFoundError, ValueError) as error:
+            raise ConfigError(f"unknown overlay.timezone: {key}") from error
+    if mode == "date" and zone is None:
+        raise ConfigError("date mode requires an overlay.timezone IANA zone")
+    return OverlayConfig(mode=mode, message=clean_message, timezone=zone)
+
+
+def _load_overlay(data: dict[str, Any]) -> OverlayConfig:
+    if "overlay" not in data:
+        return OverlayConfig()
+    overlay = _table(data, "overlay")
+    _reject_unknown_keys(
+        overlay,
+        frozenset({"mode", "message", "timezone"}),
+        "[overlay]",
+    )
+    return parse_overlay(
+        mode=overlay.get("mode", "countdown"),
+        message=overlay.get("message", ""),
+        timezone=overlay.get("timezone"),
+    )
 
 
 def validate_storage_paths(
@@ -475,6 +530,7 @@ def load_config(path: Path | None = None) -> AppConfig:
                 "schema_version",
                 "runtime",
                 "event",
+                "overlay",
                 "display",
                 "wallpaper",
                 "schedule",
@@ -549,9 +605,13 @@ def load_config(path: Path | None = None) -> AppConfig:
     if not isinstance(raw_font, str):
         raise ConfigError("style.font must be a string")
 
+    overlay = _load_overlay(data)
+    event = (
+        _load_event(data) if overlay.mode == "countdown" or "event" in data else None
+    )
     return AppConfig(
         path=config_path,
-        event=_load_event(data),
+        event=event,
         wallpaper=WallpaperConfig(
             source_directory=source_directory,
             output_directory=output_directory,
@@ -578,4 +638,5 @@ def load_config(path: Path | None = None) -> AppConfig:
         ),
         display=_load_display(data),
         runtime=RuntimeConfig(state_directory=state_directory),
+        overlay=overlay,
     )

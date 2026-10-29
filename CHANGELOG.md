@@ -7,6 +7,32 @@ uses semantic versioning once releases are published.
 
 No unreleased changes are recorded yet.
 
+## 0.3.0 - 2026-10-29
+
+### Added
+
+- A current-date overlay with a custom message and explicit IANA timezone,
+  including target-free initialization through `countscape init --mode date`.
+- Mode and message controls in `countscape configure`, retaining a valid
+  inactive countdown event so it can be resumed later.
+- Local-calendar date formatting from the actual aware instant, independent of
+  countdown buckets and photo rotation, with reuse while visible content is
+  unchanged.
+- Fontconfig matching against the displayed Unicode characters to improve
+  message-glyph selection from installed fonts.
+
+### Fixed
+
+- Exact-version upgrade instructions now replace an existing uv tool receipt
+  pin with `uv tool install --force`; `uv tool upgrade` retains the old pin and
+  can reject a different requested version.
+
+Existing countdown configs remain readable. The new optional `[overlay]` table
+requires v0.3 or later; restore a compatible private countdown-config backup
+before rolling back to v0.2.0. Platform support remains Ubuntu 26.04
+GNOME/Wayland with Python >=3.15.2, and live compatibility claims remain limited
+to separately recorded release evidence.
+
 ## 0.2.0 - 2026-10-29
 
 ### Changed

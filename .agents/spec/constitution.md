@@ -3,8 +3,8 @@
 ## 1. Purpose
 
 Build a dependable, attractive Ubuntu GNOME wallpaper that combines local
-photos with a user-configured countdown. Keep the product focused, offline, and
-reversible.
+photos with a user-configured countdown or current date and message. Keep the
+product focused, offline, and reversible.
 
 ## 2. Privacy and data ownership
 
