@@ -31,7 +31,7 @@ Existing countdown configs remain readable. The new optional `[overlay]` table
 requires v0.3 or later; restore a compatible private countdown-config backup
 before rolling back to v0.2.0. Platform support remains Ubuntu 26.04
 GNOME/Wayland with Python >=3.15.2, and live compatibility claims remain limited
-to separately recorded release evidence.
+to the [recorded release evidence](https://github.com/tylermowll/countscape/blob/main/docs/audits/v0.3.0-release.md).
 
 ## 0.2.0 - 2026-10-29
 
