@@ -1,106 +1,67 @@
-# AGENTS.md
-
-## Repository identity
+# Countscape agent instructions
 
 Countscape is an offline photo wallpaper with a countdown or current date and
-message for Ubuntu GNOME/Wayland.
-Read `.agents/spec/constitution.md` before changing the project.
+message for Ubuntu GNOME/Wayland. Python >=3.15.2 is required for v0.2 and later.
 
-The repository is intentionally public and must contain no personal photos,
-private event details, machine-local configuration, secrets, generated
-wallpapers, caches, or absolute user paths.
+## Repository constraints
 
-## Environment and dependencies
+- Use `uv` for Python environments, dependencies, commands, locks, builds, and
+  tests. Declare dependencies in `pyproject.toml` and commit `uv.lock`.
+- This repository and its artifacts are public. Keep personal photos, private
+  messages/events, config, state, logs, secrets, generated wallpapers, caches,
+  and absolute user paths out of commits and release artifacts.
+- Source photos are immutable user data: never rename, rewrite, copy, or delete
+  them, including in tests and uninstall.
+- Keep config, photos, persistent output, rebuildable cache, and state in
+  distinct, nonoverlapping paths. Avoid personal or hardware-specific defaults.
+- Calculate countdowns from timezone-aware instants and retain the IANA zone.
+  Keep overlay refresh and photo selection independent; unchanged work must
+  reuse output and avoid GNOME writes. Replace generated files atomically.
+- Keep desktop behavior behind small adapters. Discover Wayland layouts through
+  read-only Mutter DisplayConfig, retaining explicit profiles as overrides and
+  fallbacks; preserve the full layout contract in the specification below.
+- Use user-scoped GNOME/systemd facilities and an installed package environment
+  for services, never an editable checkout or repository-local environment.
+- Validate manifest paths, ownership markers, allowlisted filenames, and unit
+  content digests before lifecycle changes. Preserve foreign or edited units,
+  newer user wallpaper choices, config, and source photos. Restore GNOME URIs
+  independently and stop cleanup if restoration remains unresolved.
+- Keep normal operation offline after dependencies are installed. Automated
+  tests use temporary XDG roots and fake desktop adapters, with no live GNOME
+  changes or access to personal config and photos.
 
-- Target Python >=3.15.2 on Ubuntu 26.04 for v0.2 and later; v0.1 targeted 3.14.
-- Use `uv` exclusively for Python environments, dependencies, commands, locks,
-  builds, and tests. Do not use bare `pip`, Poetry, or Conda.
-- Declare dependencies in `pyproject.toml`, commit `uv.lock`, and run repository
-  commands through `uv run`.
+## Read for the task
 
-## Non-negotiable implementation rules
+Read the relevant sections when working on these areas:
 
-- Represent every target as a timezone-aware instant and retain its IANA zone.
-  Never perform countdown math with naive local datetimes.
-- Treat source photos as immutable user data. Never rename, rewrite, copy, or
-  delete them, including during tests and uninstall.
-- Keep personal configuration, state, photos, caches, and generated output out
-  of source control and release artifacts.
-- Keep config, source photos, persistent output, rebuildable cache, and state in
-  distinct, nonoverlapping paths with documented ownership.
-- Never hard-code a username, home directory, checkout path, event, monitor
-  resolution, or connector name as a universal default.
-- Keep countdown refresh and photo selection as independent timestamp buckets.
-  Accept whole-minute intervals or sub-minute values that evenly divide one
-  minute so wall-clock scheduling stays exact. If the user timer wakes more
-  often than a bucket changes, unchanged renders and GNOME applies must remain
-  idempotent.
-- Replace generated wallpaper and state files atomically so GNOME never reads a
-  partial file.
-- Prefer user-scoped `systemctl --user` and GNOME `gsettings`; do not require
-  root when user-session facilities suffice.
-- Generate services around the installed package environment, never a source
-  checkout or repository-local `.venv`.
-- Keep GNOME, Mutter, and systemd behavior behind small adapters so core logic
-  remains testable without a graphical session.
-- On GNOME/Wayland, discover active layout through the read-only Mutter
-  `org.gnome.Mutter.DisplayConfig.GetCurrentState` interface. Use physical
-  mode, logical position, scale, transform, primary status, layout mode, and
-  mirroring together. Do not depend on `xrandr` under Wayland.
-- Retain explicit display profiles as overrides and fallbacks.
-- Validate manifest paths against matching ownership markers and allowlisted
-  filenames before uninstalling anything.
-- Validate generated user-unit paths and content digests; never replace or
-  remove a foreign or user-edited unit silently.
-- Restore GNOME URIs independently so a newer user choice is preserved.
-- Stop removal when GNOME restoration remains unresolved rather than deleting a
-  possibly referenced file.
-- Keep the application functional offline after dependencies are installed.
+| Task | Source |
+|---|---|
+| Product behavior or invariants | [Repository constitution](.agents/spec/constitution.md) |
+| Rendering, time, display, or adapter changes | [Architecture](docs/architecture.md) and [security boundaries](docs/security-model.md) |
+| Configuration or lifecycle changes | [Configuration](docs/configuration.md) and [lifecycle](docs/lifecycle.md) |
+| Builds, publication, or support claims | [Release checklist](docs/release-checklist.md), [support](SUPPORT.md), and dated [release audits](docs/audits/) |
+| Contribution workflow or agent guidance | [Contributing](CONTRIBUTING.md) and [agent conventions](.agents/README.md) |
 
-## Product status
-
-The package, `countscape init`, date/message mode, XDG data split, independent
-second-based schedules, render reuse, idempotent GNOME apply, installed-package service, and
-ownership-marker uninstall are implemented. Version 0.3.0 is published on PyPI
-and as an immutable GitHub release from protected tag `v0.3.0`. The exact public
-wheel and source archive, a clean public-index installation, and both PyPI
-publish attestations were verified on 2026-10-29. The date-mode live GNOME
-baseline passed on the recorded two-monitor configuration, including user
-visual confirmation and natural timer rotation/reuse, as documented in
-[the release audit](docs/audits/v0.3.0-release.md). Do not claim broader platform
-support or live configurations beyond that evidence. Earlier release evidence
-and v0.2.0's publication-time exception remain separately recorded.
-
-The checked-in example intentionally has `event.confirmed = false`. Do not turn
-it into an installable default target; user configuration must be generated or
-explicitly confirmed.
+The checked-in example has `event.confirmed = false`; never turn it into an
+installable default target. Match support and publication claims to the dated
+audits; source metadata and automated tests alone do not prove publication or
+live GNOME compatibility.
 
 ## Verification
 
-Run checks appropriate to the change, normally:
+Set up with `uv sync --locked --all-groups`. During iteration, run checks that
+match the change:
 
-```bash
-uv sync --locked --all-groups
-uv run python tools/privacy_check.py --history
-uv run python tools/check_markdown_links.py
-uv run ruff format --check .
-uv run ruff check .
-uv run pytest --cov=countscape --cov-branch --cov-report=term-missing --cov-config=.coveragerc
-uv build --no-sources --clear --out-dir dist
-uv run python tools/release_check.py --artifacts dist/*.whl dist/*.tar.gz
-uv run python tools/privacy_check.py --history --artifacts dist/*.whl dist/*.tar.gz
-```
+- Documentation: `uv run python tools/check_markdown_links.py` and
+  `uv run python tools/privacy_check.py --history --staged`.
+- Python: `uv run ruff format --check .`, `uv run ruff check .`, and affected
+  tests with `uv run pytest`. Use the full branch-coverage command in
+  [Contributing](CONTRIBUTING.md#development-setup) before committing.
+- Packaging or release changes: the build, artifact audit, and installation
+  checks in the [release checklist](docs/release-checklist.md).
 
-- Test before, at, and after the target and across daylight-saving changes.
-- Test missing, empty, invalid, portrait, landscape, transparent, and long-text
-  image/render inputs.
-- Test single, mixed-orientation, scaled, transformed, and mirrored layouts.
-- Test independent interval boundaries, unchanged reuse, and backward or
-  suspend-like clock changes.
-- Use temporary XDG roots and fake desktop adapters in automated tests.
-- Never let tests change live GNOME settings, source photos, or user config.
-- Pair installation documentation and tests with update, rollback, and
-  uninstall coverage.
-- Treat live GNOME checks as manual platform evidence, not portable CI claims.
-- Review package members and reachable Git objects for privacy before
-  publication.
+The repository hooks and CI remain required gates. Enable them as documented in
+[Contributing](CONTRIBUTING.md#development-setup); do not weaken checks to make a
+change pass. Disposable local tests can be run and corrected within the task
+without repeated approval. Record live GNOME checks separately as manual
+evidence for only the tested release and configurations.
