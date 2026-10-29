@@ -10,6 +10,9 @@ uses semantic versioning once releases are published.
 - Refresh v0.3 support and wiki evidence, date-mode guidance, rollback ordering,
   and the contributor wheel-install example. Record the scoped public privacy
   audit for GitHub and PyPI.
+- Streamline agent instructions with task-specific references, retain the
+  product contract under `.agents/spec`, and document current Codex discovery
+  conventions without adding unnecessary skills.
 
 ## 0.3.0 - 2026-10-29
 
