@@ -81,8 +81,8 @@ Add at least one `.jpg`, `.jpeg`, or `.png` directly to:
 ${XDG_DATA_HOME:-$HOME/.local/share}/countscape/backgrounds/
 ```
 
-Check the environment, render a non-mutating preview, and only then install the
-timer:
+Check the environment, render a preview without changing GNOME, and only then
+install the timer:
 
 ```bash
 countscape doctor
@@ -137,8 +137,8 @@ countscape configure --mode date --message "A good day" --timezone "Etc/UTC"
 ```
 
 The existing event is retained. `countscape configure --mode countdown` resumes
-it. A configuration initialized in date mode needs a target and timezone before
-it can show a countdown; see the
+it. A configuration initialized in date mode without a target needs a target and
+timezone before it can show a countdown; see the
 [configuration guide](https://github.com/tylermowll/countscape/blob/main/docs/configuration.md).
 
 ## Version lifecycle
@@ -147,19 +147,23 @@ Always name the version you intend to run. After any package upgrade, downgrade,
 or reinstall, regenerate the systemd integration so it records the current tool
 environment.
 
+Before replacing an existing package, stop its managed timer and wait for any
+service invocation and render/apply command to finish. The
+[maintenance steps](https://github.com/tylermowll/countscape/blob/main/docs/lifecycle.md#pause-integration-before-maintenance)
+cover this pause; the final `countscape install` starts the timer again.
+
 An exact-version tool install records its pin in uv's receipt. `uv tool upgrade`
 retains that requirement, so use a forced tool install to replace the pin when
 changing versions.
 
 Before enabling date mode, keep a private backup of a compatible countdown
-configuration. Version 0.2.0 rejects the new `[overlay]` table; restore that backup
-before rolling back. Stop the managed timer and wait for its service to finish
-before restoring config or replacing the package, as described in
+configuration. Version 0.2.0 rejects the new `[overlay]` table; pause integration
+before restoring that backup or replacing the package, as described in
 [Lifecycle](https://github.com/tylermowll/countscape/blob/main/docs/lifecycle.md#roll-back).
 Keep the backup outside this repository.
 
 ```bash
-# Upgrade to an exact published version; replace X.Y.Z.
+# Pause existing integration first, then upgrade; replace X.Y.Z.
 uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
 countscape --version
 countscape doctor
@@ -182,10 +186,10 @@ confirms that GNOME no longer references them. See the complete
 [installation, update, rollback, and removal guide](https://github.com/tylermowll/countscape/blob/main/docs/lifecycle.md).
 
 Pre-v0.1 preview config and integration state are not migrated. Remove preview
-integration with the matching preview code before installing v0.1, then recreate
-configuration with `countscape init --force`; do not change a schema number by
-hand. Forced initialization refuses to replace config while managed integration
-is active; run `countscape uninstall` first.
+integration with the matching preview code before installing a published
+release, then recreate configuration with `countscape init --force`; do not
+change a schema number by hand. Forced initialization refuses to replace config
+while managed integration is active; run `countscape uninstall` first.
 
 ## Files and privacy
 

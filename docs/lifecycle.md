@@ -15,6 +15,8 @@ Run lifecycle changes sequentially. `countscape install` and
 `countscape apply`, or a timer-started service run. Wait for the active command
 or service invocation to finish, then retry the lifecycle command. This
 operating constraint is not a crash journal or power-loss durability guarantee.
+Use the [maintenance pause](#pause-integration-before-maintenance) before
+replacing an installed package or regenerating active integration.
 
 > [!IMPORTANT]
 > Use only exact versions shown on both the
@@ -24,9 +26,9 @@ Pre-v0.1 preview config and integration-state schemas have no migration path.
 The v0.1 lifecycle manifest uses schema v2 and records the persistent systemd
 user-unit link directory, so uninstall does not derive that directory from later
 ambient XDG variables. Remove preview integration with the matching preview code
-before installing v0.1, then run `countscape init --force` and re-enter the
-private target and paths. Do not change an old schema number or copy preview
-state into the v0.1 runtime directory.
+before installing a published release, then run `countscape init --force` and
+re-enter the private overlay settings and paths. Do not change an old schema
+number or copy preview state into a published release's runtime directory.
 
 ## Install v0.3.0
 
@@ -40,10 +42,32 @@ countscape install
 The version is intentionally pinned. A floating package name can change the
 installed code without making that change explicit.
 
+## Pause integration before maintenance
+
+For an existing managed Countscape installation, stop future timer wakes before
+replacing its package, restoring a config backup, or regenerating integration:
+
+```bash
+systemctl --user stop countscape.timer
+systemctl --user status countscape.service
+```
+
+Stopping the timer leaves an already running service invocation alone. Wait for
+that invocation and any manually started render/apply command to finish before
+continuing. The render/apply lock does not serialize installation or removal.
+The service status command can return a nonzero exit status when it is inactive;
+inspect its state and any failure details before proceeding.
+
+After a successful package or configuration change, `countscape doctor` checks
+the new environment and `countscape install` regenerates integration and starts
+the timer again. If a change fails, keep the timer stopped while following
+[recovery guidance](#recover-from-an-interrupted-change).
+
 ## Upgrade to an exact version
 
 Read the target release notes first, then replace `X.Y.Z` with a published
-version:
+version. [Pause integration](#pause-integration-before-maintenance) before
+replacing the tool environment:
 
 ```bash
 uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
@@ -73,7 +97,8 @@ configuration has no event target and cannot be used by v0.2.0.
 
 ## Reinstall the current version
 
-Use a forced exact-version install when the tool environment may be damaged:
+Use a forced exact-version install when the tool environment may be damaged.
+[Pause integration](#pause-integration-before-maintenance) before replacing it:
 
 ```bash
 uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
@@ -86,8 +111,8 @@ countscape install
 
 Choose a previously published version whose release notes say it accepts the
 current configuration. The concrete rollback target for v0.3.0 is v0.2.0 with
-Python 3.15.2. If date mode has been configured, stop the managed timer and wait
-for its service to finish, then restore the private v0.2-compatible countdown
+Python 3.15.2. [Pause integration](#pause-integration-before-maintenance) first.
+If date mode has been configured, restore the private v0.2-compatible countdown
 config backup before replacing the package. Preserve the same ownership seed,
 config location, and storage/state roots; do not substitute a different config.
 
@@ -115,8 +140,10 @@ timer run. Schedule changes require integration regeneration:
 
 ```bash
 countscape configure --countdown-refresh-seconds 60
-countscape install
 ```
+
+Then [pause integration](#pause-integration-before-maintenance) and run
+`countscape install` to regenerate the timer without overlapping a service run.
 
 If XDG base-directory overrides or the config path change, rerun `doctor` and
 `install` from the intended environment. The config records its runtime state

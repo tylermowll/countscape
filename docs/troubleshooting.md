@@ -41,8 +41,8 @@ countscape uninstall --state-directory "/known/private/state/countscape"
 
 Do not guess or search for a state directory, and do not delete units or state
 manually. Pre-v0.1 preview config/state are not migrated; remove preview
-integration with its matching code, then recreate configuration through v0.1
-`countscape init --force`.
+integration with its matching code, then recreate configuration through the
+published release's `countscape init --force`.
 
 The same ordering applies to any forced reinitialization: `init --force` refuses
 while managed integration is active, so complete `countscape uninstall` first.

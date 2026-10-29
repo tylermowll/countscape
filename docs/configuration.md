@@ -125,6 +125,9 @@ Initialize date mode without inventing an event target:
 countscape init --mode date --message "A good day" --timezone "Etc/UTC"
 ```
 
+Supplying an explicit `--target` during date initialization also records a
+confirmed countdown event for later use.
+
 Switch an existing countdown configuration:
 
 ```bash
@@ -135,11 +138,14 @@ The message is trimmed, limited to 160 characters, and cannot contain control
 characters or newlines. Unicode messages, such as `❤️ Welcome ❤️`, are accepted;
 available glyphs depend on the chosen system font.
 
-A retained `[event]` remains unchanged and must still contain a confirmed,
-timezone-aware target. If `--timezone` is omitted when switching modes, the
-existing date timezone is reused, or the retained event timezone is used. A
-date-only configuration must provide an IANA timezone. Changing `--timezone`
-while in date mode changes the date timezone and preserves the inactive event.
+A retained `[event]` must still contain a confirmed, timezone-aware target. In
+date mode, it remains unchanged unless event options such as `--event-label`,
+`--target`, or `--after-message` are supplied. When switching to date mode without
+`--timezone`, the existing date timezone is reused, or the retained event
+timezone is used. A date-only configuration must provide an IANA timezone.
+Changing `--timezone` alone while in date mode changes the date timezone and
+preserves the inactive event. When event options are also supplied, that timezone
+applies to the event update too.
 
 Resume a retained event with:
 
@@ -147,8 +153,8 @@ Resume a retained event with:
 countscape configure --mode countdown
 ```
 
-A configuration initialized in date mode has no event. To create a countdown,
-supply the target and zone explicitly:
+A configuration initialized in date mode without `--target` has no event. To
+create a countdown, supply the target and zone explicitly:
 
 ```bash
 countscape configure \
@@ -214,18 +220,20 @@ systemd triggers aligned to wall-clock boundaries.
 
 In date mode, `countdown_refresh_seconds` is the overlay refresh cadence. Its
 default minute interval detects local midnight on the next scheduled wake.
-When the visible date, message, and selected photo are unchanged, rendering and
-GNOME application reuse the existing output.
+When all rendering inputs, including the local date, message, selected photo,
+layout, and style, are unchanged, rendering and GNOME application reuse the
+existing output.
 
 ```bash
 countscape configure \
   --countdown-refresh-seconds 60 \
   --photo-rotation-seconds 600
-countscape install
 ```
 
-Rerun `countscape install` after either interval changes so the timer is
-regenerated.
+After either interval changes,
+[pause integration](lifecycle.md#pause-integration-before-maintenance) and rerun
+`countscape install` so the timer is regenerated without overlapping a service
+run.
 
 ## Selection seed
 
