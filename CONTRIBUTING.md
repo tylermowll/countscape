@@ -53,6 +53,13 @@ Use `uv` for every Python environment, dependency, command, lock, build, and
 test. Do not use bare `pip`, Poetry, or Conda. If dependencies change, update
 `pyproject.toml` and `uv.lock` in the same pull request.
 
+Dependabot's Python updater currently stops at Python 3.14. The dependency-graph
+workflow uses locked `uv` exports on `main` to submit the resolved runtime and
+development dependencies instead. This keeps alerts current without changing
+the Python requirement. Weekly Python dependency upgrades still require
+`uv lock --upgrade` and a reviewed pull request until Dependabot supports 3.15;
+GitHub Actions updates continue through Dependabot.
+
 The normal development environment is for tests and repository commands. Do not
 install user integration from an editable checkout. A manual integration test
 must use a built wheel in a persistent tool environment and must be performed
