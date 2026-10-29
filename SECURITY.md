@@ -9,7 +9,7 @@ GitHub release page and PyPI. Update this table as part of every later release:
 | Version | Supported |
 |---|---|
 | Published v0.1 line | Yes |
-| Published v0.2 line | Yes, once published on both channels |
+| Published v0.2 line | Yes |
 | Default-branch and other unpublished builds | No |
 | Older release lines | No |
 

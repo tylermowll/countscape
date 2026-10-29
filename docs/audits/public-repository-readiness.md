@@ -3,8 +3,10 @@
 Status: **public-repository checkpoint verified on 2026-08-22**; **Countscape
 0.1.0 published and independently verified on 2026-08-23**.
 
-This is the current, cross-machine handoff for Countscape. It replaces the
-earlier dated working audit. Live GitHub settings remain independently
+This records the v0.1.0 checkpoint and replaces the earlier dated working audit.
+For the later v0.2.0 publication, dependency-monitoring verification, and explicit
+live-baseline exception, see the [v0.2.0 release audit](v0.2.0-release.md).
+Live GitHub settings remain independently
 verifiable because repository rules, environments, and Wiki publication do not
 live in the source checkout.
 
