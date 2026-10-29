@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Ubuntu 26.04 / Python 3.14
+    name: Ubuntu 26.04 / Python 3.15.2
     runs-on: ubuntu-26.04
     timeout-minutes: 20
 
@@ -28,10 +28,10 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned uv and Python
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.12.5"
-          python-version: "3.14"
+          version: "0.13.6"
+          python-version: "3.15.2"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
@@ -93,7 +93,7 @@ jobs:
           uv tool run --isolated --from "${sdist[0]}" countscape --help
 
       - name: Upload tested distributions
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: countscape-distributions-${{ github.sha }}
           path: dist/

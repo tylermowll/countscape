@@ -5,7 +5,26 @@ uses semantic versioning once releases are published.
 
 ## Unreleased
 
-No post-v0.1 user-visible changes are recorded yet.
+No unreleased changes are recorded yet.
+
+## 0.2.0 - 2026-10-29
+
+### Changed
+
+- Require Python >=3.15.2, replacing the Python 3.14 requirement. The supported
+  desktop target remains Ubuntu 26.04 GNOME/Wayland.
+- Require Pillow >=13 and raise development and build dependency floors to the
+  versions validated for this release. Dependency requirements use minimum
+  versions; the committed lock records the exact development environment.
+- Refresh the dependency lock and pinned GitHub Actions used for validation,
+  provenance, and publication.
+- Update installation and upgrade commands for Python 3.15.2 while retaining an
+  explicit v0.1.0 rollback with Python 3.14. Configuration and integration-state
+  schemas are unchanged.
+
+Live GNOME evidence remains limited to the release and configurations recorded
+in the [readiness audit](https://github.com/tylermowll/countscape/blob/main/docs/audits/public-repository-readiness.md). Automated
+checks for this dependency update do not establish new live-platform evidence.
 
 ## 0.1.0 - 2026-08-23
 

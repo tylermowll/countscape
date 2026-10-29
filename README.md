@@ -31,12 +31,12 @@ Your source photos stay where they are and are never modified.
 
 ## Supported platform
 
-| Component | v0.1 support target |
+| Component | v0.2 support target |
 |---|---|
 | Operating system | Ubuntu 26.04 |
 | Desktop | GNOME on Wayland |
 | Session integration | systemd user manager and GNOME settings |
-| Python | 3.14 |
+| Python | >=3.15.2 |
 | Host commands | `busctl`, `fc-match`, `gsettings`, `systemctl`, `systemd-analyze` |
 
 Other GNOME distributions may work, but they are not supported until contract
@@ -50,7 +50,7 @@ Install [`uv`](https://docs.astral.sh/uv/), then install the exact Countscape
 release into a persistent tool environment:
 
 ```bash
-uv tool install --python 3.14 "countscape==0.1.0"
+uv tool install --python 3.15.2 "countscape==0.2.0"
 countscape --version
 ```
 
@@ -128,7 +128,7 @@ environment.
 
 ```bash
 # Upgrade to an exact published version; replace X.Y.Z.
-uv tool upgrade --python 3.14 "countscape==X.Y.Z"
+uv tool upgrade --python 3.15.2 "countscape==X.Y.Z"
 countscape --version
 countscape doctor
 countscape install

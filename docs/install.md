@@ -1,10 +1,10 @@
 # Install Countscape
 
-This is the canonical first-install guide for Countscape v0.1. For upgrades,
+This is the canonical first-install guide for Countscape v0.2. For upgrades,
 rollbacks, reinstalls, and removal, use [Lifecycle](lifecycle.md).
 
 > [!IMPORTANT]
-> Use the package-index command below only when v0.1.0 appears on both the
+> Use the package-index command below only when v0.2.0 appears on both the
 > [GitHub release page](https://github.com/tylermowll/countscape/releases) and
 > PyPI. Do not treat an untagged source revision as a published release.
 
@@ -12,6 +12,7 @@ rollbacks, reinstalls, and removal, use [Lifecycle](lifecycle.md).
 
 - Ubuntu 26.04
 - GNOME running on Wayland
+- Python >=3.15.2, provisioned by `uv` if needed
 - a systemd user manager
 - [`uv`](https://docs.astral.sh/uv/)
 - `busctl`, `fc-match`, `gsettings`, `systemctl`, and `systemd-analyze`
@@ -33,7 +34,7 @@ Use a persistent `uv tool` environment because the systemd service must keep a
 stable Python executable after the shell exits:
 
 ```bash
-uv tool install --python 3.14 "countscape==0.1.0"
+uv tool install --python 3.15.2 "countscape==0.2.0"
 countscape --version
 ```
 
