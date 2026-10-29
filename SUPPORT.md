@@ -5,22 +5,28 @@ the project supports and how to ask for help without publishing private data.
 
 ## Current support boundary
 
-Published v0.1 releases are community-supported. A version counts as published
-only when the exact version appears on both the GitHub release page and PyPI;
-questions about other source revisions are handled as contributor issues.
+Published v0.1 and v0.2 releases are community-supported. A version counts as
+published only when the exact version appears on both the GitHub release page
+and PyPI; questions about other source revisions are handled as contributor
+issues.
 
-The v0.1 target is:
+The v0.2 target is:
 
 - Ubuntu 26.04;
 - GNOME on Wayland;
-- Python 3.14 in a persistent `uv tool` installation;
+- Python >=3.15.2 in a persistent `uv tool` installation;
 - systemd user services; and
 - local direct-child JPG, JPEG, or PNG photos.
 
 Other distributions, X11, other desktop environments, containers, system-wide
 services, remote photo providers, multiple simultaneous events, and graphical
-configuration tools are outside the v0.1 support claim. Useful reports are still
+configuration tools are outside the v0.2 support claim. Useful reports are still
 welcome when they clearly identify an unsupported environment.
+
+Published v0.1 releases retain their Python 3.14 requirement. Live GNOME
+evidence remains limited to the release and configurations recorded in the
+[readiness audit](docs/audits/public-repository-readiness.md); a dependency update
+does not establish new live-platform evidence.
 
 Support is community-maintained and has no guaranteed response time.
 

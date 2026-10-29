@@ -30,13 +30,13 @@ def _metadata(requires_python: str) -> bytes:
 
 def test_distribution_python_contract_accepts_metadata_whitespace_only() -> None:
     release_check._validate_metadata_identity(
-        _metadata(">=3.14, <3.15"),
+        _metadata(">= 3.15.2"),
         "0.1.0",
     )
 
     with pytest.raises(ValueError, match="Python support"):
         release_check._validate_metadata_identity(
-            _metadata(">=3.14"),
+            _metadata(">=3.15"),
             "0.1.0",
         )
 

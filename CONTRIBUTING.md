@@ -66,7 +66,7 @@ uv run python tools/release_check.py \
 uv run python tools/privacy_check.py \
   --history \
   --artifacts dist/*.whl dist/*.tar.gz
-uv tool install --force --python 3.14 dist/countscape-0.1.0-py3-none-any.whl
+uv tool install --force --python 3.15.2 dist/countscape-0.2.0-py3-none-any.whl
 countscape --version
 countscape doctor
 ```

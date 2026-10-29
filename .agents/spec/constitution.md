@@ -58,7 +58,8 @@ reversible.
 
 ## 6. Python environment
 
-- Target Python 3.14 for the initial release.
+- Target Python >=3.15.2 for v0.2 and later. The initial v0.1 release targeted
+  Python 3.14.
 - Use `uv` exclusively for environments, dependency changes, locks, commands,
   builds, and tests.
 - Declare dependencies in `pyproject.toml` and commit `uv.lock`.

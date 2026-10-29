@@ -9,8 +9,8 @@ The current cross-machine status and unresolved blockers are recorded in the
 
 ## 1. Define the release
 
-- [ ] Choose the exact version and intended tag, for example `0.1.0` and
-  `v0.1.0`.
+- [ ] Choose the exact version and intended tag, currently `0.2.0` and
+  `v0.2.0`.
 - [ ] Confirm package and runtime version metadata agree.
 - [ ] Move user-visible changes from `Unreleased` into the release section of
   [CHANGELOG.md](../CHANGELOG.md).
@@ -92,7 +92,7 @@ publish only a redacted summary:
 
 ```text
 Countscape live validation
-Release candidate: 0.1.0 / <commit>
+Release candidate: 0.2.0 / <commit>
 Date (UTC): YYYY-MM-DD
 Tester reference: <non-personal identifier>
 
@@ -100,7 +100,7 @@ Environment
 - Ubuntu release: 26.04
 - GNOME Shell version: <version>
 - Session type: Wayland
-- Python version: 3.14.x
+- Python version: 3.15.2 or newer (record exact version)
 - uv version: <version>
 - Countscape version: <version>
 - Install source and artifact digest: <redacted-safe value>

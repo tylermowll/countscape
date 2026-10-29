@@ -17,8 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_NAME = "countscape"
-SUPPORTED_PYTHON = ">=3.14,<3.15"
-LOCKED_PYTHON = "==3.14.*"
+SUPPORTED_PYTHON = ">=3.15.2"
+LOCKED_PYTHON = SUPPORTED_PYTHON
 
 
 def project_version() -> str:
@@ -114,7 +114,9 @@ def _validate_metadata_identity(data: bytes, version: str) -> None:
     if normalized_name != PROJECT_NAME or artifact_version != version:
         raise ValueError("distribution filename and embedded metadata do not match")
     if "".join(python_requirement.split()) != SUPPORTED_PYTHON:
-        raise ValueError("distribution Python support does not match the v0.1 contract")
+        raise ValueError(
+            "distribution Python support does not match the release contract"
+        )
 
 
 def _validate_wheel_metadata(path: Path, version: str) -> None:
@@ -241,7 +243,7 @@ def render_release_notes(
         "## Changes\n\n"
         f"{changes}\n\n"
         "## Support scope\n\n"
-        "Countscape targets Python 3.14 on Ubuntu 26.04 with GNOME on "
+        "Countscape requires Python 3.15.2 or later on Ubuntu 26.04 with GNOME on "
         "Wayland. It uses the current user's GNOME settings and systemd user "
         "manager; root is not required for Countscape itself.\n\n"
         "## Known limitations\n\n"

@@ -11,7 +11,7 @@ wallpapers, caches, or absolute user paths.
 
 ## Environment and dependencies
 
-- Target Python 3.14 on Ubuntu 26.04.
+- Target Python >=3.15.2 on Ubuntu 26.04 for v0.2 and later; v0.1 targeted 3.14.
 - Use `uv` exclusively for Python environments, dependencies, commands, locks,
   builds, and tests. Do not use bare `pip`, Poetry, or Conda.
 - Declare dependencies in `pyproject.toml`, commit `uv.lock`, and run repository

@@ -2,13 +2,14 @@
 
 ## Supported versions
 
-Published Countscape v0.1 releases are the supported security line. A version
-counts as published only when the exact version appears on both the GitHub
-release page and PyPI. Update this table as part of every later release:
+Published Countscape v0.1 and v0.2 releases are the supported security lines. A
+version counts as published only when the exact version appears on both the
+GitHub release page and PyPI. Update this table as part of every later release:
 
 | Version | Supported |
 |---|---|
 | Published v0.1 line | Yes |
+| Published v0.2 line | Yes, once published on both channels |
 | Default-branch and other unpublished builds | No |
 | Older release lines | No |
 

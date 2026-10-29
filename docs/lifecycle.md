@@ -28,10 +28,10 @@ before installing v0.1, then run `countscape init --force` and re-enter the
 private target and paths. Do not change an old schema number or copy preview
 state into the v0.1 runtime directory.
 
-## Install v0.1.0
+## Install v0.2.0
 
 ```bash
-uv tool install --python 3.14 "countscape==0.1.0"
+uv tool install --python 3.15.2 "countscape==0.2.0"
 countscape --version
 countscape doctor
 countscape install
@@ -46,7 +46,7 @@ Read the target release notes first, then replace `X.Y.Z` with a published
 version:
 
 ```bash
-uv tool upgrade --python 3.14 "countscape==X.Y.Z"
+uv tool upgrade --python 3.15.2 "countscape==X.Y.Z"
 countscape --version
 countscape doctor
 countscape install
@@ -57,12 +57,16 @@ The final `countscape install` is required even when the tool executable path
 appears unchanged. It preflights the new package and regenerates the unit content
 and timer schedule from the current environment and configuration.
 
+Countscape v0.2 requires Python >=3.15.2 and Pillow >=13. The upgrade command
+selects the new interpreter explicitly; v0.1 used Python 3.14. The configuration
+and integration-state schemas are unchanged.
+
 ## Reinstall the current version
 
 Use a forced exact-version install when the tool environment may be damaged:
 
 ```bash
-uv tool install --force --python 3.14 "countscape==X.Y.Z"
+uv tool install --force --python 3.15.2 "countscape==X.Y.Z"
 countscape --version
 countscape doctor
 countscape install
@@ -71,8 +75,8 @@ countscape install
 ## Roll back
 
 Choose a previously published version whose release notes say it accepts the
-current configuration schema. For the initial release, the concrete rollback
-target is:
+current configuration schema. The concrete rollback target for v0.2.0 is
+v0.1.0 with its Python 3.14 interpreter:
 
 ```bash
 uv tool install --force --python 3.14 "countscape==0.1.0"
